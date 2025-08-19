@@ -1,0 +1,2 @@
+# Samrddhi
+Automated Trading Platform
