@@ -14,13 +14,16 @@ import {
 } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const DASHBOARD_API_URL = process.env.REACT_APP_DASHBOARD_API_URL || 'http://localhost:8300';
 
 class ApiService {
   private baseURL: string;
+  private dashboardURL: string;
   private token: string | null = null;
 
   constructor() {
     this.baseURL = API_BASE_URL;
+    this.dashboardURL = DASHBOARD_API_URL;
     this.loadToken();
   }
 
@@ -40,12 +43,13 @@ class ApiService {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit & { baseURL?: string } = {}
   ): Promise<ApiResponse<T>> {
-    const url = `${this.baseURL}${endpoint}`;
+    const { baseURL, ...fetchOptions } = options;
+    const url = `${baseURL || this.baseURL}${endpoint}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
+      ...(fetchOptions.headers as Record<string, string>),
     };
 
     if (this.token) {
@@ -54,7 +58,7 @@ class ApiService {
 
     try {
       const response = await fetch(url, {
-        ...options,
+        ...fetchOptions,
         headers,
       });
 
@@ -181,6 +185,67 @@ class ApiService {
     return this.request('/api/v1/user/preferences', {
       method: 'PUT',
       body: JSON.stringify(preferences),
+    });
+  }
+
+  // NEW: Dashboard API Integration
+  async getComprehensiveDashboard(): Promise<ApiResponse<any>> {
+    return this.request('/dashboard', { baseURL: this.dashboardURL });
+  }
+
+  async getPortfolioPerformance(): Promise<ApiResponse<any>> {
+    return this.request('/portfolio/performance', { baseURL: this.dashboardURL });
+  }
+
+  async getDashboardHealth(): Promise<ApiResponse<any>> {
+    return this.request('/health', { baseURL: this.dashboardURL });
+  }
+
+  // Enhanced Market Data with Database Integration
+  async getMarketDataLatest(symbol: string): Promise<ApiResponse<any>> {
+    return this.request(`/market-data/${symbol}/latest`, { baseURL: 'http://localhost:8141' });
+  }
+
+  async getTradingSignals(): Promise<ApiResponse<any>> {
+    return this.request('/trading-signals', { baseURL: 'http://localhost:8141' });
+  }
+
+  // Enhanced Portfolio Service Database Integration  
+  async getPortfolioFromDB(): Promise<ApiResponse<any>> {
+    return this.request('/portfolios', { baseURL: 'http://localhost:8100' });
+  }
+
+  async getPositionsFromDB(): Promise<ApiResponse<any>> {
+    return this.request('/positions', { baseURL: 'http://localhost:8100' });
+  }
+
+  // Enhanced Order Management Database Integration
+  async getOrdersFromDB(): Promise<ApiResponse<any>> {
+    return this.request('/orders', { baseURL: 'http://localhost:8160' });
+  }
+
+  async createOrderDB(order: any): Promise<ApiResponse<any>> {
+    return this.request('/orders', { 
+      method: 'POST',
+      body: JSON.stringify(order),
+      baseURL: 'http://localhost:8160'
+    });
+  }
+
+  // Risk Management Integration
+  async getRiskMetrics(): Promise<ApiResponse<any>> {
+    return this.request('/risk-metrics', { baseURL: 'http://localhost:8180' });
+  }
+
+  async getRiskAlerts(): Promise<ApiResponse<any>> {
+    return this.request('/risk-alerts', { baseURL: 'http://localhost:8180' });
+  }
+
+  async checkTradeRisk(trade: any): Promise<ApiResponse<any>> {
+    return this.request('/check-trade-risk', {
+      method: 'POST', 
+      body: JSON.stringify(trade),
+      baseURL: 'http://localhost:8180'
     });
   }
 }
