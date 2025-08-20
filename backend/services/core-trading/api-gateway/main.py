@@ -7,112 +7,44 @@ import asyncio
 import logging
 import os
 from typing import Dict, Any, Optional
-from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Depends, status
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
-import httpx
-import redis.asyncio as redis
 from pydantic import BaseModel
+import httpx
 
-from samrddhi.shared.auth import AuthManager
-from samrddhi.shared.monitoring import MetricsCollector
-from samrddhi.shared.utils import get_environment_config
-
-# Metrics
-REQUEST_COUNT = Counter('api_gateway_requests_total', 'Total API requests', ['method', 'endpoint', 'status'])
-REQUEST_DURATION = Histogram('api_gateway_request_duration_seconds', 'Request duration')
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Environment
-ENV = os.getenv('SAMRDDHI_ENV', 'dev')
-config = get_environment_config(ENV)
+ENV = os.getenv("ENVIRONMENT", "development")
 
-# Redis connection
-redis_client: Optional[redis.Redis] = None
-
-# Service registry
-SERVICE_REGISTRY = {
-    'portfolio': f"http://localhost:{8100 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'signal-detection': f"http://localhost:{8110 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'order-management': f"http://localhost:{8120 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'risk-management': f"http://localhost:{8130 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'market-data': f"http://localhost:{8140 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'auth': f"http://localhost:{8150 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'ml-strategy': f"http://localhost:{8160 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'backtesting': f"http://localhost:{8170 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
-    'reporting': f"http://localhost:{8180 + (0 if ENV == 'dev' else 1 if ENV == 'test' else 2)}",
+# Configuration
+config = {
+    "CORS_ORIGINS": ["http://localhost:3000", "http://localhost:3001"],
+    "REDIS_URL": "redis://localhost:6379",
+    "SERVICES": {
+        "portfolio": "http://localhost:8100",
+        "market-data": "http://localhost:8140", 
+        "order-management": "http://localhost:8160",
+        "risk-management": "http://localhost:8180",
+        "signal-detection": "http://localhost:8200"
+    }
 }
 
-# Models
-class HealthStatus(BaseModel):
-    status: str
-    environment: str
-    version: str
-    timestamp: str
-    services: Dict[str, Any]
-
-class ServiceRequest(BaseModel):
-    service: str
-    method: str
-    path: str
-    data: Optional[Dict[str, Any]] = None
-    headers: Optional[Dict[str, str]] = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    global redis_client
-    
-    # Startup
-    logging.info(f"Starting Samrddhi API Gateway - Environment: {ENV}")
-    
-    # Initialize Redis
-    try:
-        redis_client = redis.from_url(
-            f"redis://{config['REDIS_HOST']}:{config['REDIS_PORT']}/{config['REDIS_DB']}"
-        )
-        await redis_client.ping()
-        logging.info("Redis connection established")
-    except Exception as e:
-        logging.error(f"Redis connection failed: {e}")
-    
-    # Initialize metrics collector
-    metrics = MetricsCollector()
-    app.state.metrics = metrics
-    
-    # Register services
-    for service_name, service_url in SERVICE_REGISTRY.items():
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{service_url}/health", timeout=5.0)
-                if response.status_code == 200:
-                    logging.info(f"Service {service_name} is healthy")
-                else:
-                    logging.warning(f"Service {service_name} health check failed")
-        except Exception as e:
-            logging.warning(f"Service {service_name} is not available: {e}")
-    
-    yield
-    
-    # Shutdown
-    if redis_client:
-        await redis_client.close()
-    logging.info("API Gateway shutdown complete")
-
-# Create FastAPI app
 app = FastAPI(
     title="Samrddhi API Gateway",
-    description="Central API Gateway for Samrddhi Automated Trading Platform",
+    description="Central API Gateway for Samrddhi Trading Platform",
     version="1.0.0",
-    lifespan=lifespan
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.get('CORS_ORIGINS', ["http://localhost:3000"]),
@@ -120,298 +52,191 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Security
-security = HTTPBearer()
-auth_manager = AuthManager()
+# HTTP client for service communication
+http_client = httpx.AsyncClient(timeout=30.0)
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate JWT token and return user info"""
-    try:
-        user_info = await auth_manager.validate_token(credentials.credentials)
-        return user_info
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+# Health check models
+class HealthResponse(BaseModel):
+    status: str
+    timestamp: str
+    services: Dict[str, Any]
+    environment: str
 
-@app.middleware("http")
-async def metrics_middleware(request: Request, call_next):
-    """Collect metrics for all requests"""
-    start_time = asyncio.get_event_loop().time()
-    
-    response = await call_next(request)
-    
-    duration = asyncio.get_event_loop().time() - start_time
-    
-    REQUEST_COUNT.labels(
-        method=request.method,
-        endpoint=request.url.path,
-        status=response.status_code
-    ).inc()
-    
-    REQUEST_DURATION.observe(duration)
-    
-    return response
+class ServiceStatus(BaseModel):
+    name: str
+    status: str
+    url: str
+    response_time: Optional[float] = None
 
-@app.get("/health", response_model=HealthStatus)
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 Samrddhi API Gateway starting up...")
+    logger.info(f"Environment: {ENV}")
+    logger.info("API Gateway is ready!")
+
+@app.on_event("shutdown") 
+async def shutdown_event():
+    await http_client.aclose()
+    logger.info("API Gateway shutting down...")
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to Samrddhi Trading Platform API Gateway",
+        "docs": "/docs",
+        "health": "/health",
+        "environment": ENV
+    }
+
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Comprehensive health check"""
+    """Comprehensive health check for all services"""
+    import time
     from datetime import datetime
     
-    services_health = {}
+    services_status = {}
     
-    # Check each registered service
-    for service_name, service_url in SERVICE_REGISTRY.items():
+    # Check each service
+    for service_name, service_url in config["SERVICES"].items():
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{service_url}/health", timeout=2.0)
-                services_health[service_name] = {
-                    "status": "healthy" if response.status_code == 200 else "unhealthy",
-                    "response_time": response.elapsed.total_seconds(),
-                    "url": service_url
+            start_time = time.time()
+            response = await http_client.get(f"{service_url}/health", timeout=5.0)
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                services_status[service_name] = {
+                    "status": "healthy",
+                    "url": service_url,
+                    "response_time": round(response_time * 1000, 2)  # ms
+                }
+            else:
+                services_status[service_name] = {
+                    "status": "unhealthy",
+                    "url": service_url,
+                    "response_time": round(response_time * 1000, 2)
                 }
         except Exception as e:
-            services_health[service_name] = {
-                "status": "unhealthy",
-                "error": str(e),
-                "url": service_url
+            services_status[service_name] = {
+                "status": "unavailable",
+                "url": service_url,
+                "error": str(e)
             }
     
-    # Check Redis
-    redis_status = "healthy"
-    if redis_client:
-        try:
-            await redis_client.ping()
-        except Exception:
-            redis_status = "unhealthy"
-    else:
-        redis_status = "not_connected"
+    # Determine overall status
+    overall_status = "healthy"
+    if any(service["status"] == "unhealthy" for service in services_status.values()):
+        overall_status = "degraded"
+    elif any(service["status"] == "unavailable" for service in services_status.values()):
+        overall_status = "unhealthy"
     
-    return HealthStatus(
-        status="healthy",
-        environment=ENV,
-        version="1.0.0",
-        timestamp=datetime.utcnow().isoformat(),
-        services={
-            **services_health,
-            "redis": {"status": redis_status}
-        }
+    return HealthResponse(
+        status=overall_status,
+        timestamp=datetime.now().isoformat(),
+        services=services_status,
+        environment=ENV
     )
 
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return JSONResponse(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST
-    )
+# Portfolio Service Proxy
+@app.get("/api/portfolio/{path:path}")
+async def proxy_portfolio_get(path: str, request: Request):
+    return await proxy_request("portfolio", "GET", path, request)
 
-@app.post("/api/v1/proxy")
-async def proxy_request(
-    request: ServiceRequest,
-    user: dict = Depends(get_current_user)
-):
-    """Proxy requests to microservices"""
+@app.post("/api/portfolio/{path:path}")
+async def proxy_portfolio_post(path: str, request: Request):
+    return await proxy_request("portfolio", "POST", path, request)
+
+@app.put("/api/portfolio/{path:path}")
+async def proxy_portfolio_put(path: str, request: Request):
+    return await proxy_request("portfolio", "PUT", path, request)
+
+# Market Data Service Proxy
+@app.get("/api/market-data/{path:path}")
+async def proxy_market_data_get(path: str, request: Request):
+    return await proxy_request("market-data", "GET", path, request)
+
+# Order Management Service Proxy
+@app.get("/api/orders/{path:path}")
+async def proxy_orders_get(path: str, request: Request):
+    return await proxy_request("order-management", "GET", path, request)
+
+@app.post("/api/orders/{path:path}")
+async def proxy_orders_post(path: str, request: Request):
+    return await proxy_request("order-management", "POST", path, request)
+
+@app.put("/api/orders/{path:path}")
+async def proxy_orders_put(path: str, request: Request):
+    return await proxy_request("order-management", "PUT", path, request)
+
+# Risk Management Service Proxy
+@app.get("/api/risk/{path:path}")
+async def proxy_risk_get(path: str, request: Request):
+    return await proxy_request("risk-management", "GET", path, request)
+
+@app.post("/api/risk/{path:path}")
+async def proxy_risk_post(path: str, request: Request):
+    return await proxy_request("risk-management", "POST", path, request)
+
+# Signal Detection Service Proxy
+@app.get("/api/signals/{path:path}")
+async def proxy_signals_get(path: str, request: Request):
+    return await proxy_request("signal-detection", "GET", path, request)
+
+@app.post("/api/signals/{path:path}")
+async def proxy_signals_post(path: str, request: Request):
+    return await proxy_request("signal-detection", "POST", path, request)
+
+async def proxy_request(service_name: str, method: str, path: str, request: Request):
+    """Proxy requests to backend services"""
+    service_url = config["SERVICES"].get(service_name)
+    if not service_url:
+        raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
     
-    if request.service not in SERVICE_REGISTRY:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Service '{request.service}' not found"
-        )
-    
-    service_url = SERVICE_REGISTRY[request.service]
-    full_url = f"{service_url}{request.path}"
-    
-    # Add user context to headers
-    headers = request.headers or {}
-    headers["X-User-ID"] = user.get("user_id", "")
-    headers["X-User-Role"] = user.get("role", "user")
+    # Build target URL
+    query_params = str(request.url.query)
+    target_url = f"{service_url}/{path}"
+    if query_params:
+        target_url += f"?{query_params}"
     
     try:
-        async with httpx.AsyncClient() as client:
-            if request.method.upper() == "GET":
-                response = await client.get(full_url, headers=headers, timeout=30.0)
-            elif request.method.upper() == "POST":
-                response = await client.post(
-                    full_url, 
-                    json=request.data,
-                    headers=headers,
-                    timeout=30.0
-                )
-            elif request.method.upper() == "PUT":
-                response = await client.put(
-                    full_url,
-                    json=request.data,
-                    headers=headers,
-                    timeout=30.0
-                )
-            elif request.method.upper() == "DELETE":
-                response = await client.delete(full_url, headers=headers, timeout=30.0)
-            else:
-                raise HTTPException(
-                    status_code=405,
-                    detail=f"Method {request.method} not allowed"
-                )
-            
-            return JSONResponse(
-                content=response.json() if response.text else {},
-                status_code=response.status_code
-            )
-            
+        # Get request body if present
+        body = None
+        if method in ["POST", "PUT", "PATCH"]:
+            body = await request.body()
+        
+        # Forward the request
+        response = await http_client.request(
+            method=method,
+            url=target_url,
+            content=body,
+            headers={k: v for k, v in request.headers.items() 
+                    if k.lower() not in ['host', 'content-length']},
+            timeout=30.0
+        )
+        
+        # Return the response
+        return JSONResponse(
+            content=response.json() if response.headers.get('content-type', '').startswith('application/json') else response.text,
+            status_code=response.status_code,
+            headers={k: v for k, v in response.headers.items() 
+                    if k.lower() not in ['content-length', 'transfer-encoding']}
+        )
+        
     except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="Service request timed out"
-        )
+        raise HTTPException(status_code=504, detail=f"Service {service_name} timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Service {service_name} unavailable: {str(e)}")
     except Exception as e:
-        logging.error(f"Proxy request failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Service request failed"
-        )
-
-# Trading API endpoints
-@app.get("/api/v1/portfolio")
-async def get_portfolio(user: dict = Depends(get_current_user)):
-    """Get current portfolio status"""
-    request = ServiceRequest(
-        service="portfolio",
-        method="GET",
-        path="/portfolio"
-    )
-    return await proxy_request(request, user)
-
-@app.get("/api/v1/positions")
-async def get_positions(user: dict = Depends(get_current_user)):
-    """Get current positions"""
-    request = ServiceRequest(
-        service="portfolio",
-        method="GET", 
-        path="/positions"
-    )
-    return await proxy_request(request, user)
-
-@app.get("/api/v1/signals")
-async def get_signals(user: dict = Depends(get_current_user)):
-    """Get current trading signals"""
-    request = ServiceRequest(
-        service="signal-detection",
-        method="GET",
-        path="/signals"
-    )
-    return await proxy_request(request, user)
-
-@app.post("/api/v1/orders")
-async def create_order(order_data: dict, user: dict = Depends(get_current_user)):
-    """Create a new order"""
-    request = ServiceRequest(
-        service="order-management",
-        method="POST",
-        path="/orders",
-        data=order_data
-    )
-    return await proxy_request(request, user)
-
-@app.get("/api/v1/orders")
-async def get_orders(user: dict = Depends(get_current_user)):
-    """Get order history"""
-    request = ServiceRequest(
-        service="order-management",
-        method="GET",
-        path="/orders"
-    )
-    return await proxy_request(request, user)
-
-@app.get("/api/v1/risk")
-async def get_risk_metrics(user: dict = Depends(get_current_user)):
-    """Get risk metrics"""
-    request = ServiceRequest(
-        service="risk-management",
-        method="GET",
-        path="/risk"
-    )
-    return await proxy_request(request, user)
-
-@app.get("/api/v1/market-data/{symbol}")
-async def get_market_data(symbol: str, user: dict = Depends(get_current_user)):
-    """Get market data for symbol"""
-    request = ServiceRequest(
-        service="market-data",
-        method="GET",
-        path=f"/market-data/{symbol}"
-    )
-    return await proxy_request(request, user)
-
-@app.post("/api/v1/auth/login")
-async def login(login_data: dict):
-    """User login"""
-    request = ServiceRequest(
-        service="auth",
-        method="POST",
-        path="/login",
-        data=login_data
-    )
-    # Auth endpoint doesn't need user validation
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{SERVICE_REGISTRY['auth']}/login",
-                json=login_data,
-                timeout=30.0
-            )
-            return JSONResponse(
-                content=response.json() if response.text else {},
-                status_code=response.status_code
-            )
-    except Exception as e:
-        logging.error(f"Login request failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Authentication service unavailable"
-        )
-
-# Error handlers
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": exc.detail,
-            "timestamp": str(asyncio.get_event_loop().time()),
-            "path": request.url.path
-        }
-    )
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    logging.error(f"Unhandled exception: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error",
-            "timestamp": str(asyncio.get_event_loop().time()),
-            "path": request.url.path
-        }
-    )
+        logger.error(f"Proxy error for {service_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO if ENV == 'prod' else logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Determine port based on environment
-    port = 8000 if ENV == 'dev' else 8001 if ENV == 'test' else 8002
-    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=port,
-        reload=(ENV == 'dev'),
-        log_level="info" if ENV == 'prod' else "debug"
+        port=int(os.getenv("PORT", 8000)),
+        reload=True,
+        log_level="info"
     )

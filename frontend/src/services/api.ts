@@ -1,4 +1,13 @@
-import { ApiResponse, PaginatedResponse } from '../types';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { 
+  ApiResponse, 
+  PaginatedResponse, 
+  Portfolio, 
+  Position, 
+  Order, 
+  Account, 
+  Strategy 
+} from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
