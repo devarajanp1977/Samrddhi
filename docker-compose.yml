@@ -1,0 +1,284 @@
+version: '3.8'
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:15
+    container_name: samrddhi-postgres
+    environment:
+      POSTGRES_DB: samrddhi_dev
+      POSTGRES_USER: samrddhi_dev
+      POSTGRES_PASSWORD: dev_password_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U samrddhi_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - samrddhi-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: samrddhi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - samrddhi-network
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: samrddhi-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: samrddhi
+      DOCKER_INFLUXDB_INIT_PASSWORD: samrddhi_admin_2024
+      DOCKER_INFLUXDB_INIT_ORG: samrddhi
+      DOCKER_INFLUXDB_INIT_BUCKET: market_data_dev
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - samrddhi-network
+
+  # Message Queue
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.4
+    container_name: samrddhi-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - samrddhi-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.4
+    container_name: samrddhi-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - samrddhi-network
+
+  # Core Trading Services
+  api-gateway:
+    build: 
+      context: ./backend/services/core-trading/api-gateway
+      dockerfile: Dockerfile
+    container_name: samrddhi-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - INFLUX_HOST=influxdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - samrddhi-network
+
+  portfolio-service:
+    build: 
+      context: ./backend/services/core-trading/portfolio-service
+      dockerfile: Dockerfile
+    container_name: samrddhi-portfolio
+    ports:
+      - "8100:8100"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - samrddhi-network
+
+  market-data-service:
+    build: 
+      context: ./backend/services/core-trading/market-data-service
+      dockerfile: Dockerfile
+    container_name: samrddhi-market-data
+    ports:
+      - "8140:8140"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - INFLUX_HOST=influxdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - samrddhi-network
+
+  order-management-service:
+    build: 
+      context: ./backend/services/core-trading/order-management-service
+      dockerfile: Dockerfile
+    container_name: samrddhi-order-mgmt
+    ports:
+      - "8120:8120"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - POSTGRES_HOST=postgres
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - samrddhi-network
+
+  risk-management-service:
+    build: 
+      context: ./backend/services/core-trading/risk-management-service
+      dockerfile: Dockerfile
+    container_name: samrddhi-risk-mgmt
+    ports:
+      - "8130:8130"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - samrddhi-network
+
+  signal-detection-service:
+    build: 
+      context: ./backend/services/core-trading/signal-detection-service
+      dockerfile: Dockerfile
+    container_name: samrddhi-signals
+    ports:
+      - "8110:8110"
+    environment:
+      - SAMRDDHI_ENV=dev
+      - INFLUX_HOST=influxdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - samrddhi-network
+
+  # Frontend
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: samrddhi-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000/ws
+      - REACT_APP_USE_MOCK_DATA=false
+    depends_on:
+      - api-gateway
+    networks:
+      - samrddhi-network
+
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: samrddhi-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - samrddhi-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: samrddhi-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/monitoring/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - samrddhi-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: samrddhi-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - api-gateway
+      - frontend
+    networks:
+      - samrddhi-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  influxdb_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  samrddhi-network:
+    driver: bridge
+    name: samrddhi-network

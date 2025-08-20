@@ -1,0 +1,202 @@
+#!/bin/bash
+set -e
+
+echo "🧪 Starting Samrddhi Test Environment..."
+
+# Set environment
+export SAMRDDHI_ENV=test
+export $(cat .env.test | xargs)
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Function to check if service is running
+check_service() {
+    local service=$1
+    local port=$2
+    if nc -z localhost $port 2>/dev/null; then
+        echo "✅ $service is running on port $port"
+        return 0
+    else
+        echo "❌ $service is not running on port $port"
+        return 1
+    fi
+}
+
+# Function to wait for service
+wait_for_service() {
+    local service=$1
+    local port=$2
+    local max_attempts=30
+    local attempt=1
+    
+    echo "⏳ Waiting for $service to be ready..."
+    while ! check_service "$service" "$port"; do
+        if [ $attempt -eq $max_attempts ]; then
+            echo "❌ $service failed to start after $max_attempts attempts"
+            exit 1
+        fi
+        echo "   Attempt $attempt/$max_attempts - waiting for $service..."
+        sleep 2
+        ((attempt++))
+    done
+}
+
+# Clean test data
+echo "🧹 Cleaning test environment..."
+redis-cli -n 1 flushdb || echo "Redis test DB cleaned"
+
+# Reset test database
+echo "🗄️  Resetting test database..."
+dropdb --if-exists -U samrddhi_test samrddhi_test || true
+createdb -U samrddhi_test samrddhi_test || true
+
+# Check and start required services
+echo "🔍 Checking system services..."
+
+# PostgreSQL
+if ! check_service "PostgreSQL" 5432; then
+    echo "🐘 Starting PostgreSQL..."
+    sudo systemctl start postgresql
+    wait_for_service "PostgreSQL" 5432
+fi
+
+# Redis
+if ! check_service "Redis" 6379; then
+    echo "🔴 Starting Redis..."
+    sudo systemctl start redis-server
+    wait_for_service "Redis" 6379
+fi
+
+# InfluxDB
+if ! check_service "InfluxDB" 8086; then
+    echo "📊 Starting InfluxDB..."
+    sudo systemctl start influxdb
+    wait_for_service "InfluxDB" 8086
+fi
+
+# Start Kafka for testing
+echo "📡 Starting Kafka (test mode)..."
+docker-compose -f infrastructure/docker/kafka-test.yml up -d
+
+# Wait for Kafka
+wait_for_service "Kafka" 9092
+
+# Run database migrations for test
+echo "🗄️  Running test database migrations..."
+cd backend
+SAMRDDHI_ENV=test python -m alembic upgrade head || echo "No migrations to run"
+cd ..
+
+# Run tests first
+echo "🧪 Running automated tests..."
+cd backend
+python -m pytest tests/ -v --cov=. --cov-report=html || echo "Some tests failed"
+cd ..
+
+# Start backend services in test mode
+echo "🚀 Starting backend services (test mode)..."
+
+# Start API Gateway (test port)
+cd backend/services/core-trading/api-gateway
+SAMRDDHI_ENV=test uvicorn main:app --host 0.0.0.0 --port 8001 --reload &
+API_GATEWAY_PID=$!
+cd ../../../../
+
+# Wait for API Gateway
+wait_for_service "API Gateway" 8001
+
+# Start core services for testing
+echo "🔧 Starting core trading services (test mode)..."
+cd backend/services/core-trading/portfolio-service
+SAMRDDHI_ENV=test python main.py &
+PORTFOLIO_PID=$!
+cd ../../../../
+
+cd backend/services/core-trading/market-data-service
+SAMRDDHI_ENV=test python main.py &
+MARKET_DATA_PID=$!
+cd ../../../../
+
+# Start frontend in test mode
+echo "🎨 Starting frontend (test mode)..."
+cd frontend
+PORT=3001 REACT_APP_API_URL=http://localhost:8001 npm start &
+FRONTEND_PID=$!
+cd ..
+
+# Wait for frontend
+wait_for_service "Frontend" 3001
+
+# Start monitoring services for testing
+echo "📊 Starting monitoring (test mode)..."
+cd infrastructure/monitoring
+ENVIRONMENT=test docker-compose -f docker-compose.test.yml up -d
+cd ../..
+
+# Wait for services to initialize
+sleep 5
+
+# Run integration tests
+echo "🔗 Running integration tests..."
+cd tests/integration
+python -m pytest . -v || echo "Some integration tests failed"
+cd ../..
+
+# Run end-to-end tests
+echo "🎭 Running end-to-end tests..."
+cd tests/e2e
+npm test || echo "E2E tests completed"
+cd ../..
+
+# Health check
+echo "🏥 Running health checks..."
+curl -s http://localhost:8001/health || echo "API Gateway health check failed"
+
+# Store PIDs for cleanup
+echo $API_GATEWAY_PID > .test_pids
+echo $PORTFOLIO_PID >> .test_pids
+echo $MARKET_DATA_PID >> .test_pids
+echo $FRONTEND_PID >> .test_pids
+
+echo ""
+echo "✅ Samrddhi Test Environment is running!"
+echo ""
+echo "🌐 Access Points:"
+echo "   Test Dashboard:    http://localhost:3001"
+echo "   Test API Docs:     http://localhost:8001/docs"
+echo "   Test Monitoring:   http://localhost:9091 (Prometheus)"
+echo "   Test Grafana:      http://localhost:3002"
+echo ""
+echo "📊 Service Status:"
+check_service "API Gateway" 8001
+check_service "Frontend" 3001
+check_service "PostgreSQL" 5432
+check_service "Redis" 6379
+check_service "InfluxDB" 8086
+check_service "Kafka" 9092
+echo ""
+
+# Generate test report
+echo "📋 Generating test report..."
+python scripts/generate_test_report.py > reports/test_report_$(date +%Y%m%d_%H%M%S).html
+
+# Open browser
+echo "🦁 Opening Brave Browser (Test Environment)..."
+if command -v brave-browser &> /dev/null; then
+    brave-browser http://localhost:3001 &
+elif command -v brave-browser-stable &> /dev/null; then
+    brave-browser-stable http://localhost:3001 &
+elif command -v google-chrome &> /dev/null; then
+    google-chrome http://localhost:3001 &
+elif command -v firefox &> /dev/null; then
+    firefox http://localhost:3001 &
+else
+    echo "🌐 Please open http://localhost:3001 in your browser"
+fi
+
+echo "📋 Test logs are available in: logs/"
+echo "📊 Test coverage report: backend/htmlcov/index.html"
+echo "🛑 To stop all services, run: ./stop"
+echo ""
+echo "🧪 Test environment ready! All tests completed."

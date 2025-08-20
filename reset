@@ -1,0 +1,160 @@
+#!/bin/bash
+
+echo "🔄 Resetting Samrddhi Environment..."
+
+# Stop all services first
+echo "🛑 Stopping all services..."
+./stop
+
+# Wait for services to stop
+sleep 3
+
+# Function to reset database
+reset_database() {
+    local db_name=$1
+    local db_user=$2
+    echo "🗄️  Resetting database: $db_name"
+    
+    # Drop and recreate database
+    sudo -u postgres dropdb --if-exists "$db_name" 2>/dev/null || true
+    sudo -u postgres createdb -O "$db_user" "$db_name" 2>/dev/null || echo "Database creation failed for $db_name"
+}
+
+# Ask for confirmation
+echo ""
+echo "⚠️  WARNING: This will:"
+echo "   - Stop all Samrddhi services"
+echo "   - Reset all databases"
+echo "   - Clear all Redis data"
+echo "   - Remove all logs"
+echo "   - Clear Docker containers and volumes"
+echo ""
+read -p "Are you sure you want to continue? (y/N): " confirm
+
+if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    echo "❌ Reset cancelled."
+    exit 0
+fi
+
+# Reset databases
+echo "🗄️  Resetting databases..."
+reset_database "samrddhi_dev" "samrddhi_dev"
+reset_database "samrddhi_test" "samrddhi_test"
+reset_database "samrddhi_prod" "samrddhi_prod"
+
+# Clear Redis data
+echo "🔴 Clearing Redis data..."
+redis-cli flushall 2>/dev/null || echo "Redis not available"
+
+# Clear InfluxDB data
+echo "📊 Clearing InfluxDB data..."
+influx bucket delete --name market_data_dev --org samrddhi 2>/dev/null || true
+influx bucket delete --name market_data_test --org samrddhi 2>/dev/null || true
+influx bucket delete --name market_data_prod --org samrddhi 2>/dev/null || true
+
+# Recreate InfluxDB buckets
+influx bucket create --name market_data_dev --org samrddhi --retention 0 2>/dev/null || true
+influx bucket create --name market_data_test --org samrddhi --retention 0 2>/dev/null || true
+influx bucket create --name market_data_prod --org samrddhi --retention 0 2>/dev/null || true
+
+# Clear Docker containers and volumes
+echo "🐳 Clearing Docker containers and volumes..."
+docker-compose -f infrastructure/docker/docker-compose.prod.yml down -v 2>/dev/null || true
+docker-compose -f infrastructure/docker/kafka-dev.yml down -v 2>/dev/null || true
+docker-compose -f infrastructure/docker/kafka-test.yml down -v 2>/dev/null || true
+docker-compose -f infrastructure/docker/kafka-prod.yml down -v 2>/dev/null || true
+docker-compose -f infrastructure/monitoring/docker-compose.yml down -v 2>/dev/null || true
+
+# Remove Samrddhi Docker images
+docker images | grep samrddhi | awk '{print $3}' | xargs -r docker rmi -f 2>/dev/null || true
+
+# Clear Docker network
+docker network rm samrddhi-network 2>/dev/null || true
+
+# Clear logs
+echo "📜 Clearing logs..."
+rm -rf logs/*
+mkdir -p logs/{services,trading,system,audit}
+
+# Clear temporary files
+echo "🧹 Clearing temporary files..."
+rm -f .dev_pids .test_pids .prod_pids
+rm -f *.pid
+rm -rf data/temp/*
+rm -rf __pycache__ */__pycache__ */*/__pycache__
+find . -name "*.pyc" -delete 2>/dev/null || true
+
+# Clear node_modules and rebuild
+echo "📦 Clearing Node.js cache..."
+cd frontend
+rm -rf node_modules package-lock.json 2>/dev/null || true
+npm cache clean --force 2>/dev/null || true
+cd ..
+
+# Clear Python cache
+echo "🐍 Clearing Python cache..."
+source venv/bin/activate 2>/dev/null || true
+pip cache purge 2>/dev/null || true
+
+# Clear ML models and data
+echo "🤖 Clearing ML models and cached data..."
+rm -rf data/models/*
+rm -rf data/features/*
+rm -rf data/cache/*
+
+# Reset monitoring data
+echo "📊 Clearing monitoring data..."
+rm -rf infrastructure/monitoring/prometheus/data/* 2>/dev/null || true
+rm -rf infrastructure/monitoring/grafana/data/* 2>/dev/null || true
+
+# Recreate directory structure
+echo "📁 Recreating directory structure..."
+mkdir -p {logs,data,backups,uploads,exports}
+mkdir -p logs/{services,trading,system,audit}
+mkdir -p data/{models,features,backups,cache}
+mkdir -p reports
+
+# Reset environment files to defaults (keeping credentials if they exist)
+echo "⚙️  Resetting environment configuration..."
+
+# Backup existing credentials if they exist
+rh_username=""
+rh_password=""
+if [ -f ".env.prod" ]; then
+    rh_username=$(grep "RH_USERNAME=" .env.prod | cut -d'=' -f2 || echo "")
+    rh_password=$(grep "RH_PASSWORD=" .env.prod | cut -d'=' -f2 || echo "")
+fi
+
+# Regenerate environment files
+./setup.sh --quick 2>/dev/null || echo "Setup script not available, skipping environment reset"
+
+# Restore credentials if they existed
+if [ -n "$rh_username" ] && [ -n "$rh_password" ]; then
+    echo "🔑 Restoring Robinhood credentials..."
+    sed -i "s/RH_USERNAME=.*/RH_USERNAME=$rh_username/" .env.prod
+    sed -i "s/RH_PASSWORD=.*/RH_PASSWORD=$rh_password/" .env.prod
+fi
+
+# Recreate Docker network
+echo "🐳 Recreating Docker network..."
+docker network create samrddhi-network 2>/dev/null || echo "Network already exists"
+
+echo ""
+echo "✅ Samrddhi environment reset completed!"
+echo ""
+echo "📋 What was reset:"
+echo "   ✅ All databases cleared and recreated"
+echo "   ✅ Redis data cleared"
+echo "   ✅ InfluxDB buckets recreated"
+echo "   ✅ Docker containers and volumes removed"
+echo "   ✅ Log files cleared"
+echo "   ✅ Temporary files removed"
+echo "   ✅ ML models and cache cleared"
+echo "   ✅ Monitoring data reset"
+echo ""
+echo "🚀 Next steps:"
+echo "   1. Configure Robinhood credentials in .env files if needed"
+echo "   2. Run './dev' to start development environment"
+echo "   3. Run './test' to validate everything works"
+echo "   4. Run './prod' when ready for live trading"
+echo ""

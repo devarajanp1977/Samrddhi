@@ -1,0 +1,78 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Portfolio Service
+  - job_name: 'portfolio-service'
+    static_configs:
+      - targets: ['portfolio-service:8100']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Market Data Service
+  - job_name: 'market-data-service'
+    static_configs:
+      - targets: ['market-data-service:8140']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Order Management Service
+  - job_name: 'order-management-service'
+    static_configs:
+      - targets: ['order-management-service:8120']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Risk Management Service
+  - job_name: 'risk-management-service'
+    static_configs:
+      - targets: ['risk-management-service:8130']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Signal Detection Service
+  - job_name: 'signal-detection-service'
+    static_configs:
+      - targets: ['signal-detection-service:8110']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # Database Exporters
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 15s
+
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+
+  # Node Exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093

@@ -1,0 +1,185 @@
+#!/bin/bash
+set -e
+
+echo "🚀 Starting Samrddhi Development Environment..."
+
+# Set environment
+export SAMRDDHI_ENV=dev
+export $(cat .env.dev | xargs)
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Function to check if service is running
+check_service() {
+    local service=$1
+    local port=$2
+    if nc -z localhost $port 2>/dev/null; then
+        echo "✅ $service is running on port $port"
+        return 0
+    else
+        echo "❌ $service is not running on port $port"
+        return 1
+    fi
+}
+
+# Function to wait for service
+wait_for_service() {
+    local service=$1
+    local port=$2
+    local max_attempts=30
+    local attempt=1
+    
+    echo "⏳ Waiting for $service to be ready..."
+    while ! check_service "$service" "$port"; do
+        if [ $attempt -eq $max_attempts ]; then
+            echo "❌ $service failed to start after $max_attempts attempts"
+            exit 1
+        fi
+        echo "   Attempt $attempt/$max_attempts - waiting for $service..."
+        sleep 2
+        ((attempt++))
+    done
+}
+
+# Check and start required services
+echo "🔍 Checking system services..."
+
+# PostgreSQL
+if ! check_service "PostgreSQL" 5432; then
+    echo "🐘 Starting PostgreSQL..."
+    sudo systemctl start postgresql
+    wait_for_service "PostgreSQL" 5432
+fi
+
+# Redis
+if ! check_service "Redis" 6379; then
+    echo "🔴 Starting Redis..."
+    sudo systemctl start redis-server
+    wait_for_service "Redis" 6379
+fi
+
+# InfluxDB
+if ! check_service "InfluxDB" 8086; then
+    echo "📊 Starting InfluxDB..."
+    sudo systemctl start influxdb
+    wait_for_service "InfluxDB" 8086
+fi
+
+# Create Docker network if not exists
+echo "🐳 Setting up Docker network..."
+docker network create samrddhi-network 2>/dev/null || echo "Network already exists"
+
+# Start Kafka using Docker
+echo "📡 Starting Kafka..."
+docker-compose -f infrastructure/docker/kafka-dev.yml up -d
+
+# Wait for Kafka
+wait_for_service "Kafka" 9092
+
+# Run database migrations
+echo "🗄️  Running database migrations..."
+cd backend
+python -m alembic upgrade head || echo "No migrations to run"
+cd ..
+
+# Start backend services in development mode
+echo "🚀 Starting backend services..."
+
+# Start API Gateway
+cd backend/services/core-trading/api-gateway
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+API_GATEWAY_PID=$!
+cd ../../../../
+
+# Wait for API Gateway
+wait_for_service "API Gateway" 8000
+
+# Start core services
+echo "🔧 Starting core trading services..."
+cd backend/services/core-trading/portfolio-service
+python main.py &
+PORTFOLIO_PID=$!
+cd ../../../../
+
+cd backend/services/core-trading/market-data-service
+python main.py &
+MARKET_DATA_PID=$!
+cd ../../../../
+
+cd backend/services/core-trading/order-management-service
+python main.py &
+ORDER_MGMT_PID=$!
+cd ../../../../
+
+# Start frontend
+echo "🎨 Starting frontend..."
+cd frontend
+npm start &
+FRONTEND_PID=$!
+cd ..
+
+# Wait for frontend
+wait_for_service "Frontend" 3000
+
+# Start monitoring services
+echo "📊 Starting monitoring..."
+cd infrastructure/monitoring
+docker-compose up -d
+cd ../..
+
+# Wait a moment for everything to initialize
+sleep 5
+
+# Health check
+echo "🏥 Running health checks..."
+curl -s http://localhost:8000/health || echo "API Gateway health check failed"
+
+# Store PIDs for cleanup
+echo $API_GATEWAY_PID > .dev_pids
+echo $PORTFOLIO_PID >> .dev_pids
+echo $MARKET_DATA_PID >> .dev_pids
+echo $ORDER_MGMT_PID >> .dev_pids
+echo $FRONTEND_PID >> .dev_pids
+
+echo ""
+echo "✅ Samrddhi Development Environment is running!"
+echo ""
+echo "🌐 Access Points:"
+echo "   Dashboard:    http://localhost:3000"
+echo "   API Docs:     http://localhost:8000/docs"
+echo "   Monitoring:   http://localhost:9090 (Prometheus)"
+echo "   Grafana:      http://localhost:3001"
+echo ""
+echo "📊 Service Status:"
+check_service "API Gateway" 8000
+check_service "Frontend" 3000
+check_service "PostgreSQL" 5432
+check_service "Redis" 6379
+check_service "InfluxDB" 8086
+check_service "Kafka" 9092
+check_service "Prometheus" 9090
+echo ""
+
+# Open browser
+echo "🦁 Opening Brave Browser..."
+if command -v brave-browser &> /dev/null; then
+    brave-browser http://localhost:3000 &
+elif command -v brave-browser-stable &> /dev/null; then
+    brave-browser-stable http://localhost:3000 &
+elif command -v google-chrome &> /dev/null; then
+    google-chrome http://localhost:3000 &
+elif command -v firefox &> /dev/null; then
+    firefox http://localhost:3000 &
+else
+    echo "🌐 Please open http://localhost:3000 in your browser"
+fi
+
+echo "📋 Logs are available in: logs/"
+echo "🛑 To stop all services, run: ./stop"
+echo ""
+echo "🎯 Happy trading! The platform is ready for development."
+
+# Keep script running and show logs
+echo "📜 Showing live logs (Ctrl+C to exit)..."
+tail -f logs/system/samrddhi.log 2>/dev/null || echo "Waiting for logs..."

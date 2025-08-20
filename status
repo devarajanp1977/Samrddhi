@@ -1,0 +1,152 @@
+#!/bin/bash
+
+echo "📊 Checking Samrddhi Service Status..."
+
+# Function to check if service is running
+check_service() {
+    local service=$1
+    local port=$2
+    if nc -z localhost $port 2>/dev/null; then
+        echo "✅ $service is running on port $port"
+        return 0
+    else
+        echo "❌ $service is not running on port $port"
+        return 1
+    fi
+}
+
+# Function to check process by name
+check_process() {
+    local process_name=$1
+    local count=$(pgrep -f "$process_name" | wc -l)
+    if [ $count -gt 0 ]; then
+        echo "✅ $process_name: $count process(es) running"
+        return 0
+    else
+        echo "❌ $process_name: not running"
+        return 1
+    fi
+}
+
+# Detect current environment
+current_env=""
+if [ -f ".dev_pids" ]; then
+    current_env="development"
+    port_offset=0
+elif [ -f ".test_pids" ]; then
+    current_env="test"
+    port_offset=1
+elif [ -f ".prod_pids" ]; then
+    current_env="production"
+    port_offset=2
+else
+    echo "🔍 No active environment detected"
+    port_offset=-1
+fi
+
+if [ "$current_env" != "" ]; then
+    echo "📍 Current environment: $current_env"
+    echo ""
+fi
+
+# Check system services
+echo "🔧 System Services:"
+check_service "PostgreSQL" 5432
+check_service "Redis" 6379
+check_service "InfluxDB" 8086
+check_service "Kafka" 9092
+
+echo ""
+
+# Check Samrddhi services based on environment
+if [ $port_offset -ge 0 ]; then
+    api_port=$((8000 + port_offset))
+    frontend_port=$((3000 + port_offset))
+    prometheus_port=$((9090 + port_offset))
+    grafana_port=$((3001 + port_offset))
+    
+    echo "🚀 Samrddhi Services ($current_env):"
+    check_service "API Gateway" $api_port
+    check_service "Frontend" $frontend_port
+    check_service "Prometheus" $prometheus_port
+    check_service "Grafana" $grafana_port
+else
+    echo "🚀 Samrddhi Services:"
+    echo "❌ No environment currently active"
+fi
+
+echo ""
+
+# Check Docker containers
+echo "🐳 Docker Containers:"
+docker_containers=$(docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep samrddhi 2>/dev/null || echo "No Samrddhi containers running")
+if [ "$docker_containers" == "No Samrddhi containers running" ]; then
+    echo "❌ No Samrddhi containers running"
+else
+    echo "$docker_containers"
+fi
+
+echo ""
+
+# Check Python processes
+echo "🐍 Python Processes:"
+check_process "python.*samrddhi"
+check_process "uvicorn"
+
+# Check Node.js processes
+echo "📡 Node.js Processes:"
+check_process "node.*samrddhi"
+check_process "npm.*start"
+
+echo ""
+
+# Show resource usage
+echo "💻 System Resources:"
+echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)%"
+echo "Memory: $(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
+echo "Disk: $(df -h / | awk 'NR==2 {print $3 "/" $2 " (" $5 " used)"}')"
+
+echo ""
+
+# Check log files
+echo "📜 Recent Logs:"
+if [ -f "logs/system/samrddhi.log" ]; then
+    echo "System log (last 3 lines):"
+    tail -n 3 logs/system/samrddhi.log
+else
+    echo "❌ System log not found"
+fi
+
+if [ -f "logs/trading/trading.log" ]; then
+    echo "Trading log (last 3 lines):"
+    tail -n 3 logs/trading/trading.log
+else
+    echo "❌ Trading log not found"
+fi
+
+echo ""
+
+# Show network connections
+echo "🌐 Network Connections:"
+netstat -tlnp 2>/dev/null | grep -E ':(3000|3001|3002|8000|8001|8002|9090|9091|9092)' | while read line; do
+    port=$(echo $line | awk '{print $4}' | cut -d':' -f2)
+    echo "Port $port: $(echo $line | awk '{print $1}')"
+done
+
+echo ""
+
+# Quick health check if services are running
+if [ $port_offset -ge 0 ]; then
+    api_port=$((8000 + port_offset))
+    echo "🏥 Quick Health Check:"
+    
+    health_response=$(curl -s http://localhost:$api_port/health 2>/dev/null || echo "FAILED")
+    if [ "$health_response" != "FAILED" ]; then
+        echo "✅ API Gateway health check passed"
+    else
+        echo "❌ API Gateway health check failed"
+    fi
+fi
+
+echo ""
+echo "📊 Status check completed."

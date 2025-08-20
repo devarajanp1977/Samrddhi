@@ -1,0 +1,120 @@
+#!/bin/bash
+
+echo "🛑 Stopping Samrddhi Services..."
+
+# Function to kill process if it exists
+kill_process() {
+    local pid=$1
+    local name=$2
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "🔴 Stopping $name (PID: $pid)..."
+        kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+    fi
+}
+
+# Function to stop docker containers
+stop_containers() {
+    local compose_file=$1
+    if [ -f "$compose_file" ]; then
+        echo "🐳 Stopping containers from $compose_file..."
+        docker-compose -f "$compose_file" down
+    fi
+}
+
+# Stop all environments
+echo "🔍 Detecting and stopping running environments..."
+
+# Stop development environment
+if [ -f ".dev_pids" ]; then
+    echo "🚀 Stopping development environment..."
+    while IFS= read -r pid; do
+        kill_process "$pid" "Dev Service"
+    done < .dev_pids
+    rm -f .dev_pids
+fi
+
+# Stop test environment
+if [ -f ".test_pids" ]; then
+    echo "🧪 Stopping test environment..."
+    while IFS= read -r pid; do
+        kill_process "$pid" "Test Service"
+    done < .test_pids
+    rm -f .test_pids
+fi
+
+# Stop production environment
+if [ -f ".prod_pids" ]; then
+    echo "🚀 Stopping production environment..."
+    while IFS= read -r pid; do
+        kill_process "$pid" "Prod Service"
+    done < .prod_pids
+    rm -f .prod_pids
+fi
+
+# Stop Docker containers
+echo "🐳 Stopping Docker containers..."
+stop_containers "infrastructure/docker/docker-compose.prod.yml"
+stop_containers "infrastructure/docker/kafka-prod.yml"
+stop_containers "infrastructure/docker/kafka-dev.yml"
+stop_containers "infrastructure/docker/kafka-test.yml"
+stop_containers "infrastructure/monitoring/docker-compose.yml"
+stop_containers "infrastructure/monitoring/docker-compose.prod.yml"
+stop_containers "infrastructure/monitoring/docker-compose.test.yml"
+stop_containers "infrastructure/logging/docker-compose.yml"
+
+# Stop services running on known ports
+echo "🔌 Stopping services on known ports..."
+ports=(3000 3001 3002 8000 8001 8002 9090 9091 9092)
+
+for port in "${ports[@]}"; do
+    pid=$(lsof -ti:$port 2>/dev/null)
+    if [ -n "$pid" ]; then
+        echo "🔴 Stopping service on port $port (PID: $pid)..."
+        kill -TERM "$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+    fi
+done
+
+# Stop any remaining Python processes
+echo "🐍 Stopping Python processes..."
+pkill -f "python.*samrddhi" 2>/dev/null || echo "No Python processes to stop"
+pkill -f "uvicorn.*samrddhi" 2>/dev/null || echo "No Uvicorn processes to stop"
+
+# Stop Node.js processes
+echo "📡 Stopping Node.js processes..."
+pkill -f "node.*samrddhi" 2>/dev/null || echo "No Node.js processes to stop"
+pkill -f "npm.*start" 2>/dev/null || echo "No npm processes to stop"
+
+# Clean up temporary files
+echo "🧹 Cleaning up temporary files..."
+rm -f .dev_pids .test_pids .prod_pids
+rm -f *.pid
+
+# Show final status
+echo ""
+echo "✅ Samrddhi services stopped successfully!"
+echo ""
+
+# Check if any services are still running
+echo "🔍 Checking for remaining services..."
+remaining_services=()
+
+for port in "${ports[@]}"; do
+    if nc -z localhost $port 2>/dev/null; then
+        remaining_services+=("Port $port")
+    fi
+done
+
+if [ ${#remaining_services[@]} -eq 0 ]; then
+    echo "✅ All services stopped cleanly"
+else
+    echo "⚠️  Some services may still be running:"
+    for service in "${remaining_services[@]}"; do
+        echo "   - $service"
+    done
+    echo ""
+    echo "You may need to manually stop these services or restart your system."
+fi
+
+echo ""
+echo "📊 Final cleanup completed."
+echo "🔄 You can now run './dev', './test', or './prod' to restart."

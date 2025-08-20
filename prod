@@ -1,0 +1,214 @@
+#!/bin/bash
+set -e
+
+echo "🚀 Starting Samrddhi Production Environment..."
+
+# Set environment
+export SAMRDDHI_ENV=prod
+export $(cat .env.prod | xargs)
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Function to check if service is running
+check_service() {
+    local service=$1
+    local port=$2
+    if nc -z localhost $port 2>/dev/null; then
+        echo "✅ $service is running on port $port"
+        return 0
+    else
+        echo "❌ $service is not running on port $port"
+        return 1
+    fi
+}
+
+# Function to wait for service
+wait_for_service() {
+    local service=$1
+    local port=$2
+    local max_attempts=30
+    local attempt=1
+    
+    echo "⏳ Waiting for $service to be ready..."
+    while ! check_service "$service" "$port"; do
+        if [ $attempt -eq $max_attempts ]; then
+            echo "❌ $service failed to start after $max_attempts attempts"
+            exit 1
+        fi
+        echo "   Attempt $attempt/$max_attempts - waiting for $service..."
+        sleep 2
+        ((attempt++))
+    done
+}
+
+# Production safety checks
+echo "🛡️  Running production safety checks..."
+
+# Check if we have proper credentials
+if [ -z "$RH_USERNAME" ] || [ -z "$RH_PASSWORD" ]; then
+    echo "❌ Robinhood credentials not configured!"
+    echo "Please update .env.prod with your Robinhood credentials"
+    exit 1
+fi
+
+# Check if passwords are still defaults
+if grep -q "CHANGE_THIS" .env.prod; then
+    echo "⚠️  WARNING: Default passwords detected in production config!"
+    echo "Please update .env.prod with strong passwords before production use"
+    read -p "Continue anyway? (y/N): " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        exit 1
+    fi
+fi
+
+# Backup current data
+echo "💾 Creating backup..."
+mkdir -p backups/$(date +%Y%m%d_%H%M%S)
+pg_dump -U samrddhi_prod samrddhi_prod > backups/$(date +%Y%m%d_%H%M%S)/postgres_backup.sql || echo "Backup failed"
+
+# Check and start required services
+echo "🔍 Starting system services..."
+
+# PostgreSQL
+if ! check_service "PostgreSQL" 5432; then
+    echo "🐘 Starting PostgreSQL..."
+    sudo systemctl start postgresql
+    wait_for_service "PostgreSQL" 5432
+fi
+
+# Redis
+if ! check_service "Redis" 6379; then
+    echo "🔴 Starting Redis..."
+    sudo systemctl start redis-server
+    wait_for_service "Redis" 6379
+fi
+
+# InfluxDB
+if ! check_service "InfluxDB" 8086; then
+    echo "📊 Starting InfluxDB..."
+    sudo systemctl start influxdb
+    wait_for_service "InfluxDB" 8086
+fi
+
+# Start Kafka in production mode
+echo "📡 Starting Kafka (production mode)..."
+docker-compose -f infrastructure/docker/kafka-prod.yml up -d
+
+# Wait for Kafka
+wait_for_service "Kafka" 9092
+
+# Run database migrations
+echo "🗄️  Running production database migrations..."
+cd backend
+SAMRDDHI_ENV=prod python -m alembic upgrade head
+cd ..
+
+# Start all microservices using Docker Compose
+echo "🚀 Starting all microservices..."
+docker-compose -f infrastructure/docker/docker-compose.prod.yml up -d
+
+# Wait for API Gateway
+wait_for_service "API Gateway" 8002
+
+# Build and start frontend in production mode
+echo "🎨 Building and starting frontend (production)..."
+cd frontend
+npm run build
+serve -s build -l 3002 &
+FRONTEND_PID=$!
+cd ..
+
+# Wait for frontend
+wait_for_service "Frontend" 3002
+
+# Start monitoring services
+echo "📊 Starting production monitoring..."
+cd infrastructure/monitoring
+docker-compose -f docker-compose.prod.yml up -d
+cd ../..
+
+# Start log aggregation
+echo "📜 Starting log aggregation..."
+docker-compose -f infrastructure/logging/docker-compose.yml up -d
+
+# Wait for everything to initialize
+sleep 10
+
+# Run production health checks
+echo "🏥 Running comprehensive health checks..."
+python scripts/health_check.py --environment=prod
+
+# Verify trading system integrity
+echo "🔍 Verifying trading system..."
+python scripts/system_verification.py --environment=prod
+
+# Start trading engine (if health checks pass)
+if [ $? -eq 0 ]; then
+    echo "🤖 Starting intelligent trading engine..."
+    python backend/services/core-trading/trading-engine/main.py --environment=prod &
+    TRADING_ENGINE_PID=$!
+else
+    echo "❌ Health checks failed! Trading engine NOT started."
+    echo "Please review logs and fix issues before enabling live trading."
+    exit 1
+fi
+
+# Store PIDs for cleanup
+echo $FRONTEND_PID > .prod_pids
+echo $TRADING_ENGINE_PID >> .prod_pids
+
+echo ""
+echo "✅ Samrddhi Production Environment is LIVE!"
+echo ""
+echo "🌐 Access Points:"
+echo "   Production Dashboard:  http://localhost:3002"
+echo "   API Documentation:     http://localhost:8002/docs"
+echo "   Monitoring:            http://localhost:9092 (Prometheus)"
+echo "   Grafana:              http://localhost:3003"
+echo ""
+echo "📊 Service Status:"
+check_service "API Gateway" 8002
+check_service "Frontend" 3002
+check_service "PostgreSQL" 5432
+check_service "Redis" 6379
+check_service "InfluxDB" 8086
+check_service "Kafka" 9092
+check_service "Prometheus" 9092
+echo ""
+
+# Show current portfolio status
+echo "💰 Current Portfolio Status:"
+python scripts/show_portfolio_status.py --environment=prod
+
+# Show today's trading summary
+echo "📈 Today's Trading Summary:"
+python scripts/daily_summary.py --environment=prod
+
+# Open browser
+echo "🦁 Opening Brave Browser (Production Dashboard)..."
+if command -v brave-browser &> /dev/null; then
+    brave-browser http://localhost:3002 &
+elif command -v brave-browser-stable &> /dev/null; then
+    brave-browser-stable http://localhost:3002 &
+elif command -v google-chrome &> /dev/null; then
+    google-chrome http://localhost:3002 &
+elif command -v firefox &> /dev/null; then
+    firefox http://localhost:3002 &
+else
+    echo "🌐 Please open http://localhost:3002 in your browser"
+fi
+
+echo ""
+echo "⚠️  PRODUCTION ENVIRONMENT ACTIVE ⚠️"
+echo "🤖 Autonomous trading is ENABLED"
+echo "💰 Real money is at risk"
+echo ""
+echo "📋 Production logs: logs/trading/production.log"
+echo "🛑 Emergency stop: ./stop or use dashboard emergency button"
+echo "📞 Monitor alerts and notifications closely"
+echo ""
+
+# Start real-time monitoring
+echo "📊 Starting real-time monitoring dashboard..."
+python scripts/realtime_monitor.py --environment=prod
