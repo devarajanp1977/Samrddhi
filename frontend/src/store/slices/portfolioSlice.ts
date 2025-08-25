@@ -42,7 +42,7 @@ const portfolioSlice = createSlice({
       state.error = null;
     },
     updatePosition: (state, action: PayloadAction<Position>) => {
-      const index = state.positions.findIndex(p => p.id === action.payload.id);
+      const index = state.positions.findIndex((p) => p.id === action.payload.id);
       if (index !== -1) {
         state.positions[index] = action.payload;
       } else {
@@ -51,10 +51,13 @@ const portfolioSlice = createSlice({
       state.lastUpdated = new Date().toISOString();
     },
     removePosition: (state, action: PayloadAction<string>) => {
-      state.positions = state.positions.filter(p => p.id !== action.payload);
+      state.positions = state.positions.filter((p) => p.id !== action.payload);
       state.lastUpdated = new Date().toISOString();
     },
-    updatePortfolioValue: (state, action: PayloadAction<{ totalValue: number; dayPnL: number; dayPnLPercent: number }>) => {
+    updatePortfolioValue: (
+      state,
+      action: PayloadAction<{ totalValue: number; dayPnL: number; dayPnLPercent: number }>
+    ) => {
       state.totalValue = action.payload.totalValue;
       state.dayPnL = action.payload.dayPnL;
       state.dayPnLPercent = action.payload.dayPnLPercent;

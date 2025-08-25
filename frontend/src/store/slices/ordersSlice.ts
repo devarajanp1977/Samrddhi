@@ -36,13 +36,13 @@ const ordersSlice = createSlice({
       state.orders.unshift(action.payload);
     },
     updateOrder: (state, action: PayloadAction<Order>) => {
-      const index = state.orders.findIndex(order => order.id === action.payload.id);
+      const index = state.orders.findIndex((order) => order.id === action.payload.id);
       if (index !== -1) {
         state.orders[index] = action.payload;
       }
     },
     removeOrder: (state, action: PayloadAction<string>) => {
-      state.orders = state.orders.filter(order => order.id !== action.payload);
+      state.orders = state.orders.filter((order) => order.id !== action.payload);
     },
     clearOrders: (state) => {
       state.orders = [];
@@ -50,14 +50,7 @@ const ordersSlice = createSlice({
   },
 });
 
-export const {
-  setLoading,
-  setError,
-  setOrders,
-  addOrder,
-  updateOrder,
-  removeOrder,
-  clearOrders,
-} = ordersSlice.actions;
+export const { setLoading, setError, setOrders, addOrder, updateOrder, removeOrder, clearOrders } =
+  ordersSlice.actions;
 
 export default ordersSlice.reducer;

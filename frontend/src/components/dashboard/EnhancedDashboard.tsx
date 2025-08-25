@@ -122,7 +122,8 @@ const EnhancedDashboard: React.FC = () => {
     }).format(value);
   };
 
-  const formatPercent = (value: number): string => {
+  const formatPercent = (value: number | undefined): string => {
+    if (typeof value !== 'number') return '0.00%';
     return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
   };
 
@@ -239,16 +240,17 @@ const EnhancedDashboard: React.FC = () => {
                 <Typography variant="h4" sx={{ mb: 1 }}>
                   {formatCurrency(dashboardData.portfolio.total_value)}
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
+                <Typography
+                  variant="body2"
+                  sx={{
                     color: getPnLColor(dashboardData.portfolio.total_pnl),
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
                   }}
                 >
                   {dashboardData.portfolio.total_pnl > 0 ? <TrendingUp /> : <TrendingDown />}
-                  {formatCurrency(dashboardData.portfolio.total_pnl)} ({formatPercent(dashboardData.portfolio.total_pnl_percent)})
+                  {formatCurrency(dashboardData.portfolio.total_pnl)} (
+                  {formatPercent(dashboardData.portfolio.total_pnl_percent)})
                 </Typography>
               </CardContent>
             </Card>
@@ -257,7 +259,9 @@ const EnhancedDashboard: React.FC = () => {
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>Cash Balance</Typography>
+                <Typography variant="h6" gutterBottom>
+                  Cash Balance
+                </Typography>
                 <Typography variant="h4" sx={{ mb: 1 }}>
                   {formatCurrency(dashboardData.portfolio.cash_balance)}
                 </Typography>
@@ -271,7 +275,9 @@ const EnhancedDashboard: React.FC = () => {
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>Active Positions</Typography>
+                <Typography variant="h6" gutterBottom>
+                  Active Positions
+                </Typography>
                 <Typography variant="h4" sx={{ mb: 1 }}>
                   {dashboardData.portfolio.positions_count}
                 </Typography>
@@ -290,7 +296,7 @@ const EnhancedDashboard: React.FC = () => {
                   <Typography variant="h6">Risk Score</Typography>
                 </Box>
                 <Typography variant="h4" sx={{ mb: 1 }}>
-                  {dashboardData.risk_metrics.beta.toFixed(2)}
+                  {(dashboardData.risk_metrics?.beta || 0).toFixed(2)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Beta coefficient
@@ -303,12 +309,16 @@ const EnhancedDashboard: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography
+                  variant="h6"
+                  gutterBottom
+                  sx={{ display: 'flex', alignItems: 'center' }}
+                >
                   <ShowChart sx={{ mr: 1 }} />
                   Portfolio Holdings
                 </Typography>
                 <List dense>
-                  {dashboardData.market_data.map((stock) => (
+                  {(dashboardData.market_data || []).map((stock) => (
                     <ListItem key={stock.symbol} divider>
                       <ListItemText
                         primary={stock.symbol}
@@ -337,7 +347,7 @@ const EnhancedDashboard: React.FC = () => {
                   Recent Trading Signals
                 </Typography>
                 <List dense>
-                  {dashboardData.trading_signals.map((signal, index) => (
+                  {(dashboardData.trading_signals || []).map((signal, index) => (
                     <ListItem key={index} divider>
                       <ListItemIcon>
                         {signal.signal_type === 'buy' ? (
@@ -350,13 +360,19 @@ const EnhancedDashboard: React.FC = () => {
                       </ListItemIcon>
                       <ListItemText
                         primary={`${signal.symbol} - ${signal.signal_type.toUpperCase()}`}
-                        secondary={`${signal.strategy} | Confidence: ${(signal.confidence * 100).toFixed(1)}%`}
+                        secondary={`${signal.strategy} | Confidence: ${((signal.confidence || 0) * 100).toFixed(1)}%`}
                       />
                       <Box sx={{ textAlign: 'right' }}>
-                        <Chip 
-                          size="small" 
+                        <Chip
+                          size="small"
                           label={`Target: ${formatCurrency(signal.price_target)}`}
-                          color={signal.signal_type === 'buy' ? 'success' : signal.signal_type === 'sell' ? 'error' : 'default'}
+                          color={
+                            signal.signal_type === 'buy'
+                              ? 'success'
+                              : signal.signal_type === 'sell'
+                                ? 'error'
+                                : 'default'
+                          }
                         />
                       </Box>
                     </ListItem>
@@ -374,16 +390,22 @@ const EnhancedDashboard: React.FC = () => {
                   Recent Orders
                 </Typography>
                 <List dense>
-                  {dashboardData.recent_orders.map((order) => (
+                  {(dashboardData.recent_orders || []).map((order) => (
                     <ListItem key={order.id} divider>
                       <ListItemText
                         primary={`${order.symbol} - ${order.side.toUpperCase()}`}
                         secondary={`${order.quantity} @ ${formatCurrency(order.price)}`}
                       />
-                      <Chip 
-                        size="small" 
+                      <Chip
+                        size="small"
                         label={order.status}
-                        color={order.status === 'filled' ? 'success' : order.status === 'pending' ? 'warning' : 'default'}
+                        color={
+                          order.status === 'filled'
+                            ? 'success'
+                            : order.status === 'pending'
+                              ? 'warning'
+                              : 'default'
+                        }
                       />
                     </ListItem>
                   ))}
@@ -399,31 +421,44 @@ const EnhancedDashboard: React.FC = () => {
                 <Typography variant="h6" gutterBottom>
                   Risk Management
                 </Typography>
-                
+
                 {/* Risk Metrics */}
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>Key Metrics</Typography>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Key Metrics
+                  </Typography>
                   <Grid container spacing={2}>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">1-Day VaR</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        1-Day VaR
+                      </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'error.main' }}>
                         {formatCurrency(dashboardData.risk_metrics.var_1d)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Sharpe Ratio</Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                        {dashboardData.risk_metrics.sharpe_ratio.toFixed(2)}
+                      <Typography variant="body2" color="text.secondary">
+                        Sharpe Ratio
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        sx={{ fontWeight: 'bold', color: 'success.main' }}
+                      >
+                        {(dashboardData.risk_metrics?.sharpe_ratio || 0).toFixed(2)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Max Drawdown</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Max Drawdown
+                      </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'error.main' }}>
-                        {formatPercent(dashboardData.risk_metrics.max_drawdown * 100)}
+                        {formatPercent((dashboardData.risk_metrics?.max_drawdown || 0) * 100)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Total Exposure</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Exposure
+                      </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
                         {formatCurrency(dashboardData.risk_metrics.exposure)}
                       </Typography>
@@ -432,19 +467,16 @@ const EnhancedDashboard: React.FC = () => {
                 </Box>
 
                 {/* Risk Alerts */}
-                {dashboardData.risk_alerts.length > 0 && (
+                {(dashboardData.risk_alerts || []).length > 0 && (
                   <Box>
-                    <Typography variant="subtitle2" gutterBottom>Active Alerts</Typography>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Active Alerts
+                    </Typography>
                     <List dense>
-                      {dashboardData.risk_alerts.map((alert) => (
+                      {(dashboardData.risk_alerts || []).map((alert) => (
                         <ListItem key={alert.id}>
-                          <ListItemIcon>
-                            {getSeverityIcon(alert.severity)}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={alert.title}
-                            secondary={alert.message}
-                          />
+                          <ListItemIcon>{getSeverityIcon(alert.severity)}</ListItemIcon>
+                          <ListItemText primary={alert.title} secondary={alert.message} />
                         </ListItem>
                       ))}
                     </List>
@@ -462,37 +494,52 @@ const EnhancedDashboard: React.FC = () => {
                   <Typography variant="h6" gutterBottom>
                     Portfolio Performance Analysis
                   </Typography>
-                  
+
                   <Grid container spacing={3}>
                     <Grid item xs={12} md={4}>
                       <Paper sx={{ p: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>Allocation</Typography>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Allocation
+                        </Typography>
                         <Box sx={{ mb: 1 }}>
-                          <Typography variant="body2" color="text.secondary">Cash</Typography>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={performanceData.cash_percentage} 
+                          <Typography variant="body2" color="text.secondary">
+                            Cash
+                          </Typography>
+                          <LinearProgress
+                            variant="determinate"
+                            value={performanceData.cash_percentage}
                             sx={{ mb: 0.5 }}
                           />
-                          <Typography variant="body2">{formatPercent(performanceData.cash_percentage)}</Typography>
+                          <Typography variant="body2">
+                            {formatPercent(performanceData.cash_percentage)}
+                          </Typography>
                         </Box>
                         <Box>
-                          <Typography variant="body2" color="text.secondary">Invested</Typography>
-                          <LinearProgress 
-                            variant="determinate" 
+                          <Typography variant="body2" color="text.secondary">
+                            Invested
+                          </Typography>
+                          <LinearProgress
+                            variant="determinate"
                             value={performanceData.invested_percentage}
                             color="secondary"
                             sx={{ mb: 0.5 }}
                           />
-                          <Typography variant="body2">{formatPercent(performanceData.invested_percentage)}</Typography>
+                          <Typography variant="body2">
+                            {formatPercent(performanceData.invested_percentage)}
+                          </Typography>
                         </Box>
                       </Paper>
                     </Grid>
-                    
+
                     <Grid item xs={12} md={4}>
                       <Paper sx={{ p: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>Returns</Typography>
-                        <Typography variant="h5" sx={{ color: getPnLColor(performanceData.total_pnl) }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Returns
+                        </Typography>
+                        <Typography
+                          variant="h5"
+                          sx={{ color: getPnLColor(performanceData.total_pnl) }}
+                        >
                           {formatPercent(performanceData.total_return_percent)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
@@ -500,15 +547,17 @@ const EnhancedDashboard: React.FC = () => {
                         </Typography>
                       </Paper>
                     </Grid>
-                    
+
                     <Grid item xs={12} md={4}>
                       <Paper sx={{ p: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>Diversification</Typography>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Diversification
+                        </Typography>
                         <Typography variant="h5">
                           {performanceData.diversification_score}/100
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {performanceData.positions.length} positions
+                          {(performanceData.positions || []).length} positions
                         </Typography>
                       </Paper>
                     </Grid>
@@ -516,16 +565,25 @@ const EnhancedDashboard: React.FC = () => {
 
                   {/* Position Details */}
                   <Box sx={{ mt: 3 }}>
-                    <Typography variant="subtitle2" gutterBottom>Position Details</Typography>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Position Details
+                    </Typography>
                     <Grid container spacing={2}>
-                      {performanceData.positions.map((position) => (
+                      {(performanceData.positions || []).map((position) => (
                         <Grid item xs={12} md={6} lg={4} key={position.symbol}>
                           <Paper sx={{ p: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                mb: 1,
+                              }}
+                            >
                               <Typography variant="h6">{position.symbol}</Typography>
-                              <Chip 
-                                size="small" 
-                                label={`${position.weight.toFixed(1)}%`}
+                              <Chip
+                                size="small"
+                                label={`${(position.weight || 0).toFixed(1)}%`}
                                 color="primary"
                               />
                             </Box>
@@ -535,16 +593,21 @@ const EnhancedDashboard: React.FC = () => {
                             <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
                               {formatCurrency(position.market_value)}
                             </Typography>
-                            <Typography 
-                              variant="body2" 
-                              sx={{ 
+                            <Typography
+                              variant="body2"
+                              sx={{
                                 color: getPnLColor(position.unrealized_pnl),
                                 display: 'flex',
-                                alignItems: 'center'
+                                alignItems: 'center',
                               }}
                             >
-                              {position.unrealized_pnl > 0 ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
-                              {formatCurrency(position.unrealized_pnl)} ({formatPercent(position.unrealized_pnl_percent)})
+                              {position.unrealized_pnl > 0 ? (
+                                <TrendingUp fontSize="small" />
+                              ) : (
+                                <TrendingDown fontSize="small" />
+                              )}
+                              {formatCurrency(position.unrealized_pnl)} (
+                              {formatPercent(position.unrealized_pnl_percent)})
                             </Typography>
                           </Paper>
                         </Grid>

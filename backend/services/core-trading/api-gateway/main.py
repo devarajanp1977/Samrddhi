@@ -29,7 +29,7 @@ config = {
     "REDIS_URL": "redis://localhost:6379",
     "SERVICES": {
         "portfolio": "http://localhost:8100",
-        "market-data": "http://localhost:8140", 
+        "market-data": "http://localhost:8141", 
         "order-management": "http://localhost:8160",
         "risk-management": "http://localhost:8180",
         "signal-detection": "http://localhost:8200"
@@ -140,9 +140,25 @@ async def health_check():
     )
 
 # Portfolio Service Proxy
+@app.get("/api/portfolio")
+async def get_portfolio(request: Request):
+    return await proxy_request("portfolio", "GET", "portfolio", request)
+
+@app.get("/api/v1/portfolio") 
+async def get_portfolio_v1(request: Request):
+    return await proxy_request("portfolio", "GET", "portfolio", request)
+
+@app.get("/api/v1/account")
+async def get_account_v1(request: Request):
+    return await proxy_request("portfolio", "GET", "portfolio", request)
+
 @app.get("/api/portfolio/{path:path}")
 async def proxy_portfolio_get(path: str, request: Request):
     return await proxy_request("portfolio", "GET", path, request)
+
+@app.get("/api/v1/portfolio/{path:path}")
+async def proxy_portfolio_v1_get(path: str, request: Request):
+    return await proxy_request("portfolio", "GET", f"portfolio/{path}", request)
 
 @app.post("/api/portfolio/{path:path}")
 async def proxy_portfolio_post(path: str, request: Request):
@@ -153,9 +169,21 @@ async def proxy_portfolio_put(path: str, request: Request):
     return await proxy_request("portfolio", "PUT", path, request)
 
 # Market Data Service Proxy
+@app.get("/api/market-data")
+async def get_market_data(request: Request):
+    return await proxy_request("market-data", "GET", "market-data", request)
+
+@app.get("/api/v1/market-data")
+async def get_market_data_v1(request: Request):
+    return await proxy_request("market-data", "GET", "market-data", request)
+
 @app.get("/api/market-data/{path:path}")
 async def proxy_market_data_get(path: str, request: Request):
     return await proxy_request("market-data", "GET", path, request)
+
+@app.get("/api/v1/market-data/{path:path}")
+async def proxy_market_data_v1_get(path: str, request: Request):
+    return await proxy_request("market-data", "GET", f"market-data/{path}", request)
 
 # Order Management Service Proxy
 @app.get("/api/orders/{path:path}")

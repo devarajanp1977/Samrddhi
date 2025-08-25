@@ -319,7 +319,7 @@ async def startup_event():
     # Start background task for market data updates
     asyncio.create_task(broadcast_market_data())
     
-    logger.info(f"Market Data Service started successfully on port 8140")
+    logger.info(f"Market Data Service started successfully on port 8141")
 
 @app.on_event("shutdown")
 async def shutdown_event():

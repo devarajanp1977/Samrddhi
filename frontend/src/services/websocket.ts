@@ -1,20 +1,8 @@
 import { store } from '../store';
-import {
-  updateQuote,
-  updateQuotes,
-  setConnectionStatus,
-} from '../store/slices/marketDataSlice';
-import {
-  updatePortfolio,
-  updatePosition,
-} from '../store/slices/portfolioSlice';
-import {
-  addOrder,
-  updateOrder,
-} from '../store/slices/ordersSlice';
-import {
-  addAlert,
-} from '../store/slices/alertsSlice';
+import { updateQuote, updateQuotes, setConnectionStatus } from '../store/slices/marketDataSlice';
+import { updatePortfolio, updatePosition } from '../store/slices/portfolioSlice';
+import { addOrder, updateOrder } from '../store/slices/ordersSlice';
+import { addAlert } from '../store/slices/alertsSlice';
 import { WebSocketMessage } from '../types';
 
 class WebSocketService {
@@ -31,7 +19,7 @@ class WebSocketService {
   connect() {
     try {
       this.ws = new WebSocket(this.url);
-      
+
       this.ws.onopen = this.onOpen.bind(this);
       this.ws.onmessage = this.onMessage.bind(this);
       this.ws.onclose = this.onClose.bind(this);
@@ -53,18 +41,18 @@ class WebSocketService {
     console.log('WebSocket connected');
     store.dispatch(setConnectionStatus('connected'));
     this.reconnectAttempts = 0;
-    
+
     // Subscribe to market data for watchlist
     this.subscribe('market_data', {
       symbols: store.getState().marketData.watchlist,
     });
-    
+
     // Subscribe to portfolio updates
     this.subscribe('portfolio_updates', {});
-    
+
     // Subscribe to order updates
     this.subscribe('order_updates', {});
-    
+
     // Subscribe to alerts
     this.subscribe('alerts', {});
   }
@@ -92,13 +80,15 @@ class WebSocketService {
   private scheduleReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`Attempting to reconnect in ${this.reconnectInterval}ms (attempt ${this.reconnectAttempts})`);
-      
+      console.log(
+        `Attempting to reconnect in ${this.reconnectInterval}ms (attempt ${this.reconnectAttempts})`
+      );
+
       setTimeout(() => {
         store.dispatch(setConnectionStatus('connecting'));
         this.connect();
       }, this.reconnectInterval);
-      
+
       // Exponential backoff
       this.reconnectInterval = Math.min(this.reconnectInterval * 2, 30000);
     } else {
@@ -108,7 +98,7 @@ class WebSocketService {
 
   private handleMessage(message: WebSocketMessage) {
     const { type, data } = message;
-    
+
     switch (type) {
       case 'market_data':
         if (Array.isArray(data)) {
@@ -117,7 +107,7 @@ class WebSocketService {
           store.dispatch(updateQuote(data));
         }
         break;
-        
+
       case 'portfolio_update':
         if (data.type === 'portfolio') {
           store.dispatch(updatePortfolio(data.portfolio));
@@ -125,7 +115,7 @@ class WebSocketService {
           store.dispatch(updatePosition(data.position));
         }
         break;
-        
+
       case 'order_update':
         if (data.action === 'create') {
           store.dispatch(addOrder(data.order));
@@ -133,15 +123,15 @@ class WebSocketService {
           store.dispatch(updateOrder(data.order));
         }
         break;
-        
+
       case 'alert':
         store.dispatch(addAlert(data));
         break;
-        
+
       case 'system':
         console.log('System message:', data);
         break;
-        
+
       default:
         console.log('Unknown message type:', type);
     }

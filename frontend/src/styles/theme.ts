@@ -87,21 +87,21 @@ const theme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          scrollbarColor: "#444 #1a1a1a",
-          "&::-webkit-scrollbar, & *::-webkit-scrollbar": {
+          scrollbarColor: '#444 #1a1a1a',
+          '&::-webkit-scrollbar, & *::-webkit-scrollbar': {
             width: 8,
             height: 8,
           },
-          "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
+          '&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb': {
             borderRadius: 4,
-            backgroundColor: "#444",
+            backgroundColor: '#444',
           },
-          "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
-            backgroundColor: "#666",
+          '&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover': {
+            backgroundColor: '#666',
           },
-          "&::-webkit-scrollbar-track, & *::-webkit-scrollbar-track": {
+          '&::-webkit-scrollbar-track, & *::-webkit-scrollbar-track': {
             borderRadius: 4,
-            backgroundColor: "#1a1a1a",
+            backgroundColor: '#1a1a1a',
           },
         },
       },

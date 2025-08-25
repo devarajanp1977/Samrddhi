@@ -31,14 +31,17 @@ const marketDataSlice = createSlice({
       state.error = action.payload;
       state.loading = false;
     },
-    setConnectionStatus: (state, action: PayloadAction<'connected' | 'connecting' | 'disconnected'>) => {
+    setConnectionStatus: (
+      state,
+      action: PayloadAction<'connected' | 'connecting' | 'disconnected'>
+    ) => {
       state.connectionStatus = action.payload;
     },
     updateQuote: (state, action: PayloadAction<MarketData>) => {
       state.quotes[action.payload.symbol] = action.payload;
     },
     updateQuotes: (state, action: PayloadAction<MarketData[]>) => {
-      action.payload.forEach(quote => {
+      action.payload.forEach((quote) => {
         state.quotes[quote.symbol] = quote;
       });
       state.loading = false;
@@ -50,7 +53,7 @@ const marketDataSlice = createSlice({
       }
     },
     removeFromWatchlist: (state, action: PayloadAction<string>) => {
-      state.watchlist = state.watchlist.filter(symbol => symbol !== action.payload);
+      state.watchlist = state.watchlist.filter((symbol) => symbol !== action.payload);
     },
     setWatchlist: (state, action: PayloadAction<string[]>) => {
       state.watchlist = action.payload;
