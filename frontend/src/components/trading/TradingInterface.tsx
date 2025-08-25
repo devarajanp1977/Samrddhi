@@ -20,12 +20,7 @@ import {
   Tooltip,
   LinearProgress,
 } from '@mui/material';
-import {
-  TrendingUp,
-  TrendingDown,
-  Refresh,
-  Send,
-} from '@mui/icons-material';
+import { TrendingUp, TrendingDown, Refresh, Send } from '@mui/icons-material';
 import { apiService } from '../../services/apiService';
 
 interface OrderFormData {
@@ -98,9 +93,9 @@ const TradingInterface: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof OrderFormData, value: any) => {
-    setOrderForm(prev => ({
+    setOrderForm((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
     setError(null);
     setSuccess(null);
@@ -133,10 +128,12 @@ const TradingInterface: React.FC = () => {
     try {
       // For demo purposes, we'll simulate the order submission
       // In a real implementation, this would call apiService.submitOrder()
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
-      
-      setSuccess(`${orderForm.side.toUpperCase()} order for ${orderForm.quantity} shares of ${orderForm.symbol.toUpperCase()} submitted successfully!`);
-      
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate API call
+
+      setSuccess(
+        `${orderForm.side.toUpperCase()} order for ${orderForm.quantity} shares of ${orderForm.symbol.toUpperCase()} submitted successfully!`
+      );
+
       // Reset form
       setOrderForm({
         symbol: '',
@@ -232,7 +229,9 @@ const TradingInterface: React.FC = () => {
                   type="number"
                   label="Limit Price"
                   value={orderForm.price || ''}
-                  onChange={(e) => handleInputChange('price', parseFloat(e.target.value) || undefined)}
+                  onChange={(e) =>
+                    handleInputChange('price', parseFloat(e.target.value) || undefined)
+                  }
                   disabled={loading}
                   inputProps={{ step: '0.01' }}
                 />
@@ -243,12 +242,14 @@ const TradingInterface: React.FC = () => {
           {/* Order Summary */}
           {orderForm.symbol && orderForm.quantity > 0 && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography variant="subtitle2" gutterBottom>Order Summary</Typography>
+              <Typography variant="subtitle2" gutterBottom>
+                Order Summary
+              </Typography>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="body2">Action:</Typography>
-                <Chip 
-                  size="small" 
-                  label={orderForm.side.toUpperCase()} 
+                <Chip
+                  size="small"
+                  label={orderForm.side.toUpperCase()}
                   color={orderForm.side === 'buy' ? 'success' : 'error'}
                 />
               </Box>
@@ -272,8 +273,19 @@ const TradingInterface: React.FC = () => {
                   <Typography variant="body2">{formatCurrency(orderForm.price)}</Typography>
                 </Box>
               )}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Estimated Total:</Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  mt: 2,
+                  pt: 1,
+                  borderTop: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                  Estimated Total:
+                </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
                   {formatCurrency(estimatedTotal())}
                 </Typography>
@@ -300,30 +312,32 @@ const TradingInterface: React.FC = () => {
               variant="contained"
               onClick={handleSubmitOrder}
               disabled={loading || !orderForm.symbol || orderForm.quantity <= 0}
-              startIcon={loading ? undefined : (orderForm.side === 'buy' ? <TrendingUp /> : <TrendingDown />)}
+              startIcon={
+                loading ? undefined : orderForm.side === 'buy' ? <TrendingUp /> : <TrendingDown />
+              }
               color={orderForm.side === 'buy' ? 'success' : 'error'}
             >
-              {loading ? 'Submitting Order...' : `${orderForm.side.toUpperCase()} ${orderForm.symbol.toUpperCase() || 'Stock'}`}
+              {loading
+                ? 'Submitting Order...'
+                : `${orderForm.side.toUpperCase()} ${orderForm.symbol.toUpperCase() || 'Stock'}`}
             </Button>
-            {loading && (
-              <LinearProgress sx={{ mt: 1, height: 2 }} />
-            )}
+            {loading && <LinearProgress sx={{ mt: 1, height: 2 }} />}
           </Box>
         </Box>
 
         {/* Recent Orders */}
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="subtitle2">
-              Recent Orders
-            </Typography>
+          <Box
+            sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}
+          >
+            <Typography variant="subtitle2">Recent Orders</Typography>
             <Tooltip title="Refresh Orders">
               <IconButton size="small" onClick={fetchRecentOrders} disabled={refreshing}>
                 <Refresh fontSize="small" />
               </IconButton>
             </Tooltip>
           </Box>
-          
+
           {recentOrders.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
               No recent orders
@@ -331,21 +345,31 @@ const TradingInterface: React.FC = () => {
           ) : (
             <List dense>
               {recentOrders.slice(0, 5).map((order) => (
-                <ListItem 
-                  key={order.id} 
-                  sx={{ 
-                    px: 0, 
+                <ListItem
+                  key={order.id}
+                  sx={{
+                    px: 0,
                     py: 0.5,
                     borderBottom: '1px solid',
                     borderColor: 'divider',
-                    '&:last-child': { borderBottom: 'none' }
+                    '&:last-child': { borderBottom: 'none' },
                   }}
                 >
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {order.side === 'buy' ? <TrendingUp fontSize="small" color="success" /> : <TrendingDown fontSize="small" color="error" />}
+                          {order.side === 'buy' ? (
+                            <TrendingUp fontSize="small" color="success" />
+                          ) : (
+                            <TrendingDown fontSize="small" color="error" />
+                          )}
                           <Typography variant="body2" sx={{ fontWeight: 'bold', ml: 1 }}>
                             {order.symbol}
                           </Typography>
@@ -358,7 +382,14 @@ const TradingInterface: React.FC = () => {
                       </Box>
                     }
                     secondary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          mt: 0.5,
+                        }}
+                      >
                         <Typography variant="body2" color="text.secondary">
                           {order.quantity} @ {formatCurrency(order.price)}
                         </Typography>

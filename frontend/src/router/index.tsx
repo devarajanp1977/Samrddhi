@@ -2,17 +2,16 @@ import React from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import Dashboard from '../components/dashboard/Dashboard';
-
-// Placeholder components for other routes
-const TradingPage = () => <div>Trading Page - Coming Soon</div>;
-const PortfolioPage = () => <div>Portfolio Page - Coming Soon</div>;
-const AnalyticsPage = () => <div>Analytics Page - Coming Soon</div>;
-const StrategiesPage = () => <div>Strategies Page - Coming Soon</div>;
-const HistoryPage = () => <div>History Page - Coming Soon</div>;
-const RiskPage = () => <div>Risk Management Page - Coming Soon</div>;
-const AccountPage = () => <div>Account Page - Coming Soon</div>;
-const AlertsPage = () => <div>Alerts Page - Coming Soon</div>;
-const SettingsPage = () => <div>Settings Page - Coming Soon</div>;
+import TradingPage from '../components/trading/TradingPage';
+import PortfolioPage from '../components/portfolio/PortfolioPage';
+import AnalyticsPage from '../components/analytics/AnalyticsPage';
+import StrategiesPage from '../components/strategies/StrategiesPage';
+import HistoryPage from '../components/history/HistoryPage';
+import RiskPage from '../components/risk/RiskPage';
+import SettingsPage from '../components/settings/SettingsPage';
+import AccountPage from '../components/account/AccountPage';
+import AlertsPage from '../components/alerts/AlertsPage';
+import AlpacaTestPage from '../components/trading/AlpacaTestPage';
 
 const router = createBrowserRouter([
   {
@@ -26,6 +25,10 @@ const router = createBrowserRouter([
       {
         path: '/trading/*',
         element: <TradingPage />,
+      },
+      {
+        path: '/alpaca-test',
+        element: <AlpacaTestPage />,
       },
       {
         path: '/portfolio',

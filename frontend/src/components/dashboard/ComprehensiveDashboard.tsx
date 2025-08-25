@@ -1,6 +1,7 @@
 import React from 'react';
 import { Grid, Box, Typography, Divider } from '@mui/material';
 import { Dashboard, TrendingUp } from '@mui/icons-material';
+import ErrorBoundary from '../common/ErrorBoundary';
 import EnhancedDashboard from './EnhancedDashboard';
 import RealTimePortfolioCard from './RealTimePortfolioCard';
 import RealTimeMarketCard from './RealTimeMarketCard';
@@ -27,26 +28,40 @@ const ComprehensiveDashboard: React.FC = () => {
       <Grid container spacing={3}>
         {/* Main Enhanced Dashboard - Full Width */}
         <Grid item xs={12}>
-          <EnhancedDashboard />
+          <ErrorBoundary>
+            <EnhancedDashboard />
+          </ErrorBoundary>
         </Grid>
-        
+
         {/* Real-Time Components and Trading Interface Row */}
         <Grid item xs={12} md={4}>
-          <RealTimePortfolioCard />
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <RealTimeMarketCard />
+          <ErrorBoundary>
+            <RealTimePortfolioCard />
+          </ErrorBoundary>
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <TradingInterface />
+          <ErrorBoundary>
+            <RealTimeMarketCard />
+          </ErrorBoundary>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <ErrorBoundary>
+            <TradingInterface />
+          </ErrorBoundary>
         </Grid>
       </Grid>
 
       {/* Footer Information */}
-      <Box sx={{ mt: 4, pt: 2, borderTop: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box
+        sx={{ mt: 4, pt: 2, borderTop: '1px solid', borderColor: 'divider', textAlign: 'center' }}
+      >
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
           <TrendingUp sx={{ mr: 1 }} />
           Samrddhi Trading Platform - Database-Integrated Real-Time Trading System
         </Typography>

@@ -59,13 +59,19 @@ const settingsSlice = createSlice({
     updateTimezone: (state, action: PayloadAction<string>) => {
       state.timezone = action.payload;
     },
-    updateNotificationSettings: (state, action: PayloadAction<Partial<UserPreferences['notifications']>>) => {
+    updateNotificationSettings: (
+      state,
+      action: PayloadAction<Partial<UserPreferences['notifications']>>
+    ) => {
       state.notifications = { ...state.notifications, ...action.payload };
     },
     updateTradingSettings: (state, action: PayloadAction<Partial<UserPreferences['trading']>>) => {
       state.trading = { ...state.trading, ...action.payload };
     },
-    updateDashboardSettings: (state, action: PayloadAction<Partial<UserPreferences['dashboard']>>) => {
+    updateDashboardSettings: (
+      state,
+      action: PayloadAction<Partial<UserPreferences['dashboard']>>
+    ) => {
       state.dashboard = { ...state.dashboard, ...action.payload };
     },
     addWidgetToDashboard: (state, action: PayloadAction<string>) => {
@@ -74,7 +80,9 @@ const settingsSlice = createSlice({
       }
     },
     removeWidgetFromDashboard: (state, action: PayloadAction<string>) => {
-      state.dashboard.widgets = state.dashboard.widgets.filter(widget => widget !== action.payload);
+      state.dashboard.widgets = state.dashboard.widgets.filter(
+        (widget) => widget !== action.payload
+      );
     },
     updateDefaultTimeframe: (state, action: PayloadAction<string>) => {
       state.defaultTimeframe = action.payload;

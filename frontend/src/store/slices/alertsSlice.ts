@@ -36,28 +36,28 @@ const alertsSlice = createSlice({
       state.alerts.unshift(action.payload);
     },
     updateAlert: (state, action: PayloadAction<Alert>) => {
-      const index = state.alerts.findIndex(alert => alert.id === action.payload.id);
+      const index = state.alerts.findIndex((alert) => alert.id === action.payload.id);
       if (index !== -1) {
         state.alerts[index] = action.payload;
       }
     },
     markAsRead: (state, action: PayloadAction<string>) => {
-      const alert = state.alerts.find(alert => alert.id === action.payload);
+      const alert = state.alerts.find((alert) => alert.id === action.payload);
       if (alert) {
         alert.read = true;
       }
     },
     markAllAsRead: (state) => {
-      state.alerts.forEach(alert => {
+      state.alerts.forEach((alert) => {
         alert.read = true;
       });
     },
     removeAlert: (state, action: PayloadAction<string>) => {
-      state.alerts = state.alerts.filter(alert => alert.id !== action.payload);
+      state.alerts = state.alerts.filter((alert) => alert.id !== action.payload);
     },
     clearExpiredAlerts: (state) => {
       const now = new Date().toISOString();
-      state.alerts = state.alerts.filter(alert => !alert.expiresAt || alert.expiresAt > now);
+      state.alerts = state.alerts.filter((alert) => !alert.expiresAt || alert.expiresAt > now);
     },
   },
 });

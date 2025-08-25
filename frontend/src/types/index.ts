@@ -182,11 +182,14 @@ export interface NewsItem {
 
 export interface SystemHealth {
   status: 'healthy' | 'degraded' | 'down';
-  services: Record<string, {
-    status: 'up' | 'down';
-    latency: number;
-    lastCheck: string;
-  }>;
+  services: Record<
+    string,
+    {
+      status: 'up' | 'down';
+      latency: number;
+      lastCheck: string;
+    }
+  >;
   marketDataStatus: 'connected' | 'disconnected' | 'delayed';
   tradingStatus: 'enabled' | 'disabled' | 'restricted';
   lastUpdated: string;

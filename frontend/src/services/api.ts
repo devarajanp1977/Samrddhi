@@ -1,12 +1,12 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { 
-  ApiResponse, 
-  PaginatedResponse, 
-  Portfolio, 
-  Position, 
-  Order, 
-  Account, 
-  Strategy 
+import {
+  ApiResponse,
+  PaginatedResponse,
+  Portfolio,
+  Position,
+  Order,
+  Account,
+  Strategy,
 } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -16,10 +16,11 @@ class ApiService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8000'
-      : 'https://api.samrddhi.com';
-      
+    this.baseURL =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:8000'
+        : 'https://api.samrddhi.com';
+
     this.api = axios.create({
       baseURL: this.baseURL,
       timeout: 10000,

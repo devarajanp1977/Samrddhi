@@ -2,21 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
+  CardHeader,
   Typography,
-  Box,
-  LinearProgress,
-  Chip,
   Grid,
-  IconButton,
-  Tooltip,
-  Alert,
+  LinearProgress,
+  Box,
+  Chip,
+  Avatar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Paper,
+  Divider,
 } from '@mui/material';
 import {
   TrendingUp,
   TrendingDown,
-  Refresh,
-  Speed,
+  AccountBalance,
   ShowChart,
+  Assessment,
+  MonetizationOn,
 } from '@mui/icons-material';
 import { apiService } from '../../services/apiService';
 
@@ -31,62 +37,55 @@ interface Position {
   weight: number;
 }
 
-interface PortfolioPerformance {
-  portfolio_id: string;
-  total_value: number;
-  cash_balance: number;
-  invested_amount: number;
-  market_value: number;
-  total_pnl: number;
-  total_return_percent: number;
-  cash_percentage: number;
-  invested_percentage: number;
-  positions: Position[];
-  diversification_score: number;
+interface DashboardResponse {
+  timestamp: string;
+  portfolio: {
+    id: string;
+    name: string;
+    total_value: number;
+    cash_balance: number;
+    total_pnl: number;
+    total_pnl_percent: number;
+    positions_count: number;
+    positions_value: number;
+  };
+  recent_orders: any[];
+  market_data: any[];
+  trading_signals: any[];
+  risk_alerts: any[];
+  risk_metrics: any;
 }
 
 const RealTimePortfolioCard: React.FC = () => {
-  const [portfolio, setPortfolio] = useState<PortfolioPerformance | null>(null);
+  const [portfolioData, setPortfolioData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  const formatCurrency = (value: number): string => {
+  const formatCurrency = (amount: number | undefined): string => {
+    if (typeof amount !== 'number') return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(value);
+    }).format(amount);
   };
 
-  const formatPercent = (value: number): string => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
-
-  const getPnLColor = (value: number): string => {
-    if (value > 0) return '#4caf50';
-    if (value < 0) return '#f44336';
-    return '#666666';
+  const formatPercent = (value: number | undefined): string => {
+    if (typeof value !== 'number') return '0.00%';
+    return `${value.toFixed(2)}%`;
   };
 
   const fetchPortfolioData = async () => {
     try {
-      setError(null);
-      
-      const response = await apiService.getPortfolioPerformance();
+      setLoading(true);
+      const response = await apiService.getDashboard();
       if (response.success) {
-        setPortfolio(response.data);
-        setLastUpdate(new Date());
+        setPortfolioData(response.data);
       } else {
         setError('Failed to fetch portfolio data');
       }
-    } catch (err: unknown) {
-      let errorMessage = 'Failed to fetch portfolio data';
-      if (err instanceof Error) {
-        errorMessage = (err as Error).message;
-      }
-      setError(errorMessage);
-      console.error('Portfolio data fetch error:', err);
+    } catch (err) {
+      setError('Error fetching portfolio data');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -94,22 +93,22 @@ const RealTimePortfolioCard: React.FC = () => {
 
   useEffect(() => {
     fetchPortfolioData();
-
-    // Auto-refresh every 15 seconds
-    const interval = setInterval(fetchPortfolioData, 15000);
+    const interval = setInterval(fetchPortfolioData, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
 
-  if (loading && !portfolio) {
+  if (loading && !portfolioData) {
     return (
-      <Card>
+      <Card sx={{ minHeight: 400 }}>
         <CardContent>
-          <Box sx={{ width: '100%' }}>
-            <LinearProgress />
-            <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
-              Loading real-time portfolio data...
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <MonetizationOn sx={{ mr: 1 }} />
+            <Typography variant="h6">Portfolio Overview</Typography>
           </Box>
+          <LinearProgress />
+          <Typography variant="body2" sx={{ mt: 2 }}>
+            Loading portfolio data...
+          </Typography>
         </CardContent>
       </Card>
     );
@@ -117,178 +116,214 @@ const RealTimePortfolioCard: React.FC = () => {
 
   if (error) {
     return (
-      <Card>
+      <Card sx={{ minHeight: 400 }}>
         <CardContent>
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <IconButton onClick={fetchPortfolioData} color="primary">
-              <Refresh />
-            </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <MonetizationOn sx={{ mr: 1 }} />
+            <Typography variant="h6">Portfolio Overview</Typography>
           </Box>
+          <Typography color="error">{error}</Typography>
         </CardContent>
       </Card>
     );
   }
 
-  if (!portfolio) {
+  if (!portfolioData?.portfolio) {
     return (
-      <Card>
+      <Card sx={{ minHeight: 400 }}>
         <CardContent>
-          <Typography variant="body2" color="text.secondary">
-            No portfolio data available
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <MonetizationOn sx={{ mr: 1 }} />
+            <Typography variant="h6">Portfolio Overview</Typography>
+          </Box>
+          <Typography>No portfolio data available</Typography>
         </CardContent>
       </Card>
     );
   }
+
+  const portfolio = portfolioData.portfolio;
+  const totalReturn = portfolio.total_pnl || 0;
+  const totalReturnPercent = portfolio.total_pnl_percent || 0;
+  const cashPercentage = portfolio.total_value
+    ? (portfolio.cash_balance / portfolio.total_value) * 100
+    : 0;
+  const investedPercentage = portfolio.total_value
+    ? (portfolio.positions_value / portfolio.total_value) * 100
+    : 0;
 
   return (
     <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'primary.main' }}>
+            <MonetizationOn />
+          </Avatar>
+        }
+        title="Real-Time Portfolio"
+        subheader={`Last updated: ${new Date().toLocaleTimeString()}`}
+      />
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
-            <ShowChart sx={{ mr: 1 }} />
-            Real-Time Portfolio
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              {lastUpdate.toLocaleTimeString()}
-            </Typography>
-            <Tooltip title="Refresh Portfolio">
-              <IconButton size="small" onClick={fetchPortfolioData} disabled={loading}>
-                <Refresh fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
-        {/* Portfolio Summary */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6}>
-            <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+        <Grid container spacing={3}>
+          {/* Portfolio Value */}
+          <Grid item xs={12} sm={6}>
+            <Paper sx={{ p: 2, textAlign: 'center' }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                 {formatCurrency(portfolio.total_value)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Total Value
+                Total Portfolio Value
               </Typography>
-            </Box>
+            </Paper>
           </Grid>
-          <Grid item xs={6}>
-            <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography 
-                variant="h5" 
-                sx={{ 
-                  fontWeight: 'bold',
-                  color: getPnLColor(portfolio.total_pnl),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                {portfolio.total_pnl > 0 ? <TrendingUp /> : <TrendingDown />}
-                {formatPercent(portfolio.total_return_percent)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Return ({formatCurrency(portfolio.total_pnl)})
-              </Typography>
-            </Box>
-          </Grid>
-        </Grid>
 
-        {/* Allocation Overview */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Allocation</Typography>
-          <Box sx={{ mb: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="body2">Cash</Typography>
-              <Typography variant="body2">{formatPercent(portfolio.cash_percentage)}</Typography>
-            </Box>
-            <LinearProgress 
-              variant="determinate" 
-              value={portfolio.cash_percentage} 
-              sx={{ mb: 1, height: 6, borderRadius: 3 }}
-            />
-          </Box>
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="body2">Invested</Typography>
-              <Typography variant="body2">{formatPercent(portfolio.invested_percentage)}</Typography>
-            </Box>
-            <LinearProgress 
-              variant="determinate" 
-              value={portfolio.invested_percentage}
-              color="secondary"
-              sx={{ height: 6, borderRadius: 3 }}
-            />
-          </Box>
-        </Box>
-
-        {/* Top Positions */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>Top Holdings</Typography>
-          {portfolio.positions.slice(0, 3).map((position) => (
-            <Box key={position.symbol} sx={{ mb: 1.5, p: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                  {position.symbol}
-                </Typography>
-                <Chip 
-                  size="small" 
-                  label={`${position.weight.toFixed(1)}%`}
-                  color="primary"
-                  variant="outlined"
-                />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {position.quantity} @ {formatCurrency(position.average_price)}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(position.market_value)}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Current: {formatCurrency(position.current_price)}
-                </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: getPnLColor(position.unrealized_pnl),
-                    display: 'flex',
-                    alignItems: 'center',
-                    fontWeight: 'bold'
+          {/* Total Return */}
+          <Grid item xs={12} sm={6}>
+            <Paper sx={{ p: 2, textAlign: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
+                {totalReturn >= 0 ? (
+                  <TrendingUp sx={{ color: 'success.main', mr: 1 }} />
+                ) : (
+                  <TrendingDown sx={{ color: 'error.main', mr: 1 }} />
+                )}
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 'bold',
+                    color: totalReturn >= 0 ? 'success.main' : 'error.main',
                   }}
                 >
-                  {position.unrealized_pnl > 0 ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
-                  {formatPercent(position.unrealized_pnl_percent)}
+                  {formatCurrency(totalReturn)}
                 </Typography>
               </Box>
-            </Box>
-          ))}
-        </Box>
+              <Chip
+                label={formatPercent(totalReturnPercent)}
+                color={totalReturn >= 0 ? 'success' : 'error'}
+                size="small"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Total Return
+              </Typography>
+            </Paper>
+          </Grid>
 
-        {/* Portfolio Health */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, bgcolor: 'primary.light', borderRadius: 1, color: 'primary.contrastText' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Speed sx={{ mr: 1 }} />
-            <Typography variant="body2">
-              Diversification Score
-            </Typography>
-          </Box>
-          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-            {portfolio.diversification_score}/100
-          </Typography>
-        </Box>
+          {/* Cash Balance */}
+          <Grid item xs={12} sm={6}>
+            <Paper sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <AccountBalance sx={{ mr: 1, color: 'info.main' }} />
+                <Typography variant="h6">Cash</Typography>
+              </Box>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                {formatCurrency(portfolio.cash_balance)}
+              </Typography>
+              <Box sx={{ mt: 1 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={cashPercentage}
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {formatPercent(cashPercentage)} of portfolio
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
 
-        {loading && (
-          <Box sx={{ mt: 1 }}>
-            <LinearProgress sx={{ height: 2 }} />
-          </Box>
-        )}
+          {/* Invested Amount */}
+          <Grid item xs={12} sm={6}>
+            <Paper sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <ShowChart sx={{ mr: 1, color: 'warning.main' }} />
+                <Typography variant="h6">Invested</Typography>
+              </Box>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                {formatCurrency(portfolio.positions_value)}
+              </Typography>
+              <Box sx={{ mt: 1 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={investedPercentage}
+                  color="warning"
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {formatPercent(investedPercentage)} of portfolio
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Portfolio Metrics */}
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                <Assessment sx={{ mr: 1 }} />
+                Portfolio Metrics
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Positions
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolio.positions_count}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Cash Ratio
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {formatPercent(cashPercentage)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Investment Ratio
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {formatPercent(investedPercentage)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Portfolio ID
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    {portfolio.id.substring(0, 8)}...
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Grid>
+
+          {/* Recent Activity */}
+          {portfolioData.recent_orders && portfolioData.recent_orders.length > 0 && (
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Recent Orders
+                </Typography>
+                <List dense>
+                  {portfolioData.recent_orders.slice(0, 3).map((order: any, index: number) => (
+                    <ListItem key={index}>
+                      <ListItemAvatar>
+                        <Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem' }}>
+                          {order.symbol?.substring(0, 2)}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={`${order.side} ${order.quantity} ${order.symbol}`}
+                        secondary={`${formatCurrency(order.price)} - ${order.status}`}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            </Grid>
+          )}
+        </Grid>
       </CardContent>
     </Card>
   );

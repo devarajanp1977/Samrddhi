@@ -28,7 +28,6 @@ import {
   AccountBalanceWallet,
   Receipt,
   TrendingUp,
-  TrendingDown,
   Speed,
   Shield,
   Assessment,
@@ -58,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
     if (item.children) {
       const isOpen = openItems.includes(item.text);
       if (isOpen) {
-        setOpenItems(openItems.filter(openItem => openItem !== item.text));
+        setOpenItems(openItems.filter((openItem) => openItem !== item.text));
       } else {
         setOpenItems([...openItems, item.text]);
       }
@@ -97,9 +96,14 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
           path: '/trading/positions',
         },
         {
-          text: 'Watchlist',
-          icon: <TrendingDown />,
+          text: 'Candidates',
+          icon: <Speed />,
           path: '/trading/watchlist',
+        },
+        {
+          text: 'Alpaca Test',
+          icon: <Assessment />,
+          path: '/alpaca-test',
         },
       ],
     },
@@ -205,16 +209,14 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
               }}
             />
             {hasChildren && (
-              <Box sx={{ color: 'text.secondary' }}>
-                {isOpen ? <ExpandLess /> : <ExpandMore />}
-              </Box>
+              <Box sx={{ color: 'text.secondary' }}>{isOpen ? <ExpandLess /> : <ExpandMore />}</Box>
             )}
           </ListItemButton>
         </ListItem>
         {hasChildren && (
           <Collapse in={isOpen} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
-              {item.children!.map(child => renderMenuItem(child, level + 1))}
+              {item.children!.map((child) => renderMenuItem(child, level + 1))}
             </List>
           </Collapse>
         )}
@@ -243,9 +245,15 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
         </Box>
       </Toolbar>
       <Divider />
-      
+
       {/* Trading Status Indicator */}
-      <Box sx={{ p: 2, backgroundColor: 'rgba(76, 175, 80, 0.1)', border: '1px solid rgba(76, 175, 80, 0.3)' }}>
+      <Box
+        sx={{
+          p: 2,
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          border: '1px solid rgba(76, 175, 80, 0.3)',
+        }}
+      >
         <Typography variant="caption" color="success.main" fontWeight="bold">
           ● LIVE TRADING ACTIVE
         </Typography>
@@ -253,13 +261,11 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
           All systems operational
         </Typography>
       </Box>
-      
-      <List sx={{ flexGrow: 1, py: 1 }}>
-        {menuItems.map(item => renderMenuItem(item))}
-      </List>
-      
+
+      <List sx={{ flexGrow: 1, py: 1 }}>{menuItems.map((item) => renderMenuItem(item))}</List>
+
       <Divider />
-      
+
       {/* Footer Info */}
       <Box sx={{ p: 2, backgroundColor: 'rgba(0,0,0,0.2)' }}>
         <Typography variant="caption" color="text.secondary" display="block">
@@ -276,10 +282,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
   );
 
   return (
-    <Box
-      component="nav"
-      sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-    >
+    <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}>
       {/* Mobile drawer */}
       <Drawer
         variant="temporary"
@@ -298,7 +301,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle, drawerWid
       >
         {drawer}
       </Drawer>
-      
+
       {/* Desktop drawer */}
       <Drawer
         variant="permanent"

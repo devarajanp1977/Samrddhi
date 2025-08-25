@@ -1,5 +1,5 @@
-import { 
-  ApiResponse, 
+import {
+  ApiResponse,
   PaginatedResponse,
   Portfolio,
   Position,
@@ -10,7 +10,7 @@ import {
   Alert,
   SystemHealth,
   UserPreferences,
-  NewsItem
+  NewsItem,
 } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -68,19 +68,28 @@ class ApiService {
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
 
-      return data;
+      return {
+        success: true,
+        data: data,
+      } as ApiResponse<T>;
     } catch (error) {
       console.error('API request failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      } as ApiResponse<T>;
     }
   }
 
   // Authentication
   async login(username: string, password: string) {
-    const response = await this.request<{ access_token: string; token_type: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
+    const response = await this.request<{ access_token: string; token_type: string }>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      }
+    );
 
     if (response.success && response.data) {
       this.saveToken(response.data.access_token);
@@ -126,7 +135,10 @@ class ApiService {
   }
 
   // Orders endpoints
-  async getOrders(page: number = 1, limit: number = 50): Promise<ApiResponse<PaginatedResponse<Order>>> {
+  async getOrders(
+    page: number = 1,
+    limit: number = 50
+  ): Promise<ApiResponse<PaginatedResponse<Order>>> {
     return this.request(`/api/v1/orders?page=${page}&limit=${limit}`);
   }
 
@@ -181,7 +193,9 @@ class ApiService {
     return this.request('/api/v1/user/preferences');
   }
 
-  async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<ApiResponse<UserPreferences>> {
+  async updateUserPreferences(
+    preferences: Partial<UserPreferences>
+  ): Promise<ApiResponse<UserPreferences>> {
     return this.request('/api/v1/user/preferences', {
       method: 'PUT',
       body: JSON.stringify(preferences),
@@ -190,11 +204,156 @@ class ApiService {
 
   // NEW: Dashboard API Integration
   async getComprehensiveDashboard(): Promise<ApiResponse<any>> {
-    return this.request('/dashboard', { baseURL: this.dashboardURL });
+    try {
+      // Get both portfolio and market data from the working APIs
+      const portfolioResponse = await this.request('/api/v1/portfolio');
+      const marketDataResponse = await this.request('/api/v1/market-data');
+
+      if (portfolioResponse.success && marketDataResponse.success) {
+        const portfolioData = portfolioResponse.data as any;
+        const marketDataRaw = marketDataResponse.data as any;
+
+        // Transform market data from object to array format with proper field mapping
+        const marketDataArray = marketDataRaw.data
+          ? Object.values(marketDataRaw.data).map((stock: any) => ({
+              symbol: stock.symbol,
+              close_price: stock.price,
+              high_price: stock.price * 1.02, // Mock high price (2% above current)
+              low_price: stock.price * 0.98, // Mock low price (2% below current)
+              volume: stock.volume,
+              timestamp: stock.timestamp,
+              change: stock.change,
+              change_percent: stock.change_percent,
+            }))
+          : Object.values(marketDataRaw).map((stock: any) => ({
+              symbol: stock.symbol,
+              close_price: stock.price,
+              high_price: stock.price * 1.02,
+              low_price: stock.price * 0.98,
+              volume: stock.volume,
+              timestamp: stock.timestamp,
+              change: stock.change,
+              change_percent: stock.change_percent,
+            }));
+
+        // Transform comprehensive dashboard format with BOTH portfolio and market data
+        const comprehensiveDashboard = {
+          timestamp: new Date().toISOString(),
+          portfolio: {
+            id: portfolioData.id,
+            name: portfolioData.name,
+            total_value: portfolioData.account_value, // Fixed: using account_value from API
+            cash_balance: portfolioData.cash_balance,
+            total_pnl: portfolioData.total_return,
+            total_pnl_percent: portfolioData.total_return_percent,
+            positions_count: portfolioData.positions_count,
+            positions_value: portfolioData.account_value - portfolioData.cash_balance,
+            positions: [], // Mock positions for now
+          },
+          market_data: marketDataArray, // Now it's an array with proper field names
+          trading_signals: [], // Mock for now
+          system_health: 'healthy',
+          active_positions: 0,
+          recent_orders: [], // Mock for now
+          risk_alerts: [], // Mock for now
+          risk_metrics: {}, // Mock for now
+        };
+
+        return {
+          success: true,
+          data: comprehensiveDashboard,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to fetch comprehensive dashboard data',
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Comprehensive dashboard error: ${error}`,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  async getDashboard(): Promise<ApiResponse<any>> {
+    try {
+      // Get portfolio data from the working API
+      const portfolioResponse = await this.request('/api/v1/portfolio');
+      const marketDataResponse = await this.request('/api/v1/market-data');
+
+      if (portfolioResponse.success && marketDataResponse.success) {
+        // Cast the data to access properties
+        const portfolioData = portfolioResponse.data as any;
+        const marketDataRaw = marketDataResponse.data as any;
+
+        // Transform market data from object to array format with proper field mapping
+        const marketDataArray = marketDataRaw.data
+          ? Object.values(marketDataRaw.data).map((stock: any) => ({
+              symbol: stock.symbol,
+              close_price: stock.price,
+              high_price: stock.price * 1.02, // Mock high price (2% above current)
+              low_price: stock.price * 0.98, // Mock low price (2% below current)
+              volume: stock.volume,
+              timestamp: stock.timestamp,
+              change: stock.change,
+              change_percent: stock.change_percent,
+            }))
+          : Object.values(marketDataRaw).map((stock: any) => ({
+              symbol: stock.symbol,
+              close_price: stock.price,
+              high_price: stock.price * 1.02,
+              low_price: stock.price * 0.98,
+              volume: stock.volume,
+              timestamp: stock.timestamp,
+              change: stock.change,
+              change_percent: stock.change_percent,
+            }));
+
+        // Combine portfolio and market data into dashboard format
+        const dashboard = {
+          timestamp: new Date().toISOString(),
+          portfolio: {
+            id: portfolioData.id,
+            name: portfolioData.name,
+            total_value: portfolioData.account_value, // Fixed: using account_value from API
+            cash_balance: portfolioData.cash_balance,
+            total_pnl: portfolioData.total_return,
+            total_pnl_percent: portfolioData.total_return_percent,
+            positions_count: portfolioData.positions_count,
+            positions_value: portfolioData.account_value - portfolioData.cash_balance,
+            positions: [], // Mock positions for now
+          },
+          market_data: marketDataArray,
+          system_status: 'operational',
+        };
+        return {
+          success: true,
+          data: dashboard,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to fetch dashboard data',
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Dashboard error: ${error}`,
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   async getPortfolioPerformance(): Promise<ApiResponse<any>> {
-    return this.request('/portfolio/performance', { baseURL: this.dashboardURL });
+    return this.request('/dashboard', { baseURL: this.dashboardURL });
   }
 
   async getDashboardHealth(): Promise<ApiResponse<any>> {
@@ -210,7 +369,7 @@ class ApiService {
     return this.request('/trading-signals', { baseURL: 'http://localhost:8141' });
   }
 
-  // Enhanced Portfolio Service Database Integration  
+  // Enhanced Portfolio Service Database Integration
   async getPortfolioFromDB(): Promise<ApiResponse<any>> {
     return this.request('/portfolios', { baseURL: 'http://localhost:8100' });
   }
@@ -225,10 +384,10 @@ class ApiService {
   }
 
   async createOrderDB(order: any): Promise<ApiResponse<any>> {
-    return this.request('/orders', { 
+    return this.request('/orders', {
       method: 'POST',
       body: JSON.stringify(order),
-      baseURL: 'http://localhost:8160'
+      baseURL: 'http://localhost:8160',
     });
   }
 
@@ -243,9 +402,32 @@ class ApiService {
 
   async checkTradeRisk(trade: any): Promise<ApiResponse<any>> {
     return this.request('/check-trade-risk', {
-      method: 'POST', 
+      method: 'POST',
       body: JSON.stringify(trade),
-      baseURL: 'http://localhost:8180'
+      baseURL: 'http://localhost:8180',
+    });
+  }
+
+  // Alpaca Integration (direct service access on :8200 until gateway route added)
+  async getAlpacaHealth(): Promise<ApiResponse<any>> {
+    return this.request('/health', { baseURL: 'http://localhost:8200' });
+  }
+
+  async getAlpacaAccount(): Promise<ApiResponse<any>> {
+    return this.request('/account', { baseURL: 'http://localhost:8200' });
+  }
+
+  async injectAlpacaCredentials(payload: {
+    environment: 'paper' | 'live';
+    api_key: string;
+    secret_key: string;
+    persist: boolean;
+    encrypt: boolean;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/credentials', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      baseURL: 'http://localhost:8200',
     });
   }
 }

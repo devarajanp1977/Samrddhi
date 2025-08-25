@@ -13,13 +13,7 @@ import {
   ListItemText,
   LinearProgress,
 } from '@mui/material';
-import {
-  TrendingUp,
-  TrendingDown,
-  Refresh,
-  ShowChart,
-  Speed,
-} from '@mui/icons-material';
+import { TrendingUp, TrendingDown, Refresh, ShowChart, Speed } from '@mui/icons-material';
 import { apiService } from '../../services/apiService';
 
 interface MarketDataItem {
@@ -55,7 +49,8 @@ const RealTimeMarketCard: React.FC = () => {
     }).format(value);
   };
 
-  const formatVolume = (volume: number): string => {
+  const formatVolume = (volume: number | undefined): string => {
+    if (typeof volume !== 'number') return '0';
     if (volume >= 1000000) {
       return `${(volume / 1000000).toFixed(1)}M`;
     } else if (volume >= 1000) {
@@ -89,7 +84,7 @@ const RealTimeMarketCard: React.FC = () => {
   const fetchMarketData = async () => {
     try {
       setError(null);
-      
+
       const response = await apiService.getComprehensiveDashboard();
       if (response.success) {
         setMarketData(response.data.market_data || []);
@@ -182,19 +177,25 @@ const RealTimeMarketCard: React.FC = () => {
           ) : (
             <List dense>
               {marketData.map((stock) => (
-                <ListItem 
-                  key={stock.symbol} 
-                  sx={{ 
-                    px: 0, 
+                <ListItem
+                  key={stock.symbol}
+                  sx={{
+                    px: 0,
                     py: 0.5,
                     borderBottom: '1px solid',
                     borderColor: 'divider',
-                    '&:last-child': { borderBottom: 'none' }
+                    '&:last-child': { borderBottom: 'none' },
                   }}
                 >
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
                         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                           {stock.symbol}
                         </Typography>
@@ -204,7 +205,14 @@ const RealTimeMarketCard: React.FC = () => {
                       </Box>
                     }
                     secondary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          mt: 0.5,
+                        }}
+                      >
                         <Typography variant="body2" color="text.secondary">
                           H: {formatCurrency(stock.high_price)} L: {formatCurrency(stock.low_price)}
                         </Typography>
@@ -222,7 +230,11 @@ const RealTimeMarketCard: React.FC = () => {
 
         {/* Trading Signals Section */}
         <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{ display: 'flex', alignItems: 'center' }}
+          >
             <Speed sx={{ mr: 1, fontSize: 16 }} />
             Live Trading Signals
           </Typography>
@@ -233,14 +245,14 @@ const RealTimeMarketCard: React.FC = () => {
           ) : (
             <List dense>
               {tradingSignals.slice(0, 4).map((signal, index) => (
-                <ListItem 
-                  key={index} 
-                  sx={{ 
-                    px: 0, 
+                <ListItem
+                  key={index}
+                  sx={{
+                    px: 0,
                     py: 0.5,
                     borderBottom: '1px solid',
                     borderColor: 'divider',
-                    '&:last-child': { borderBottom: 'none' }
+                    '&:last-child': { borderBottom: 'none' },
                   }}
                 >
                   <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
@@ -248,7 +260,13 @@ const RealTimeMarketCard: React.FC = () => {
                   </Box>
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
                         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                           {signal.symbol}
                         </Typography>
@@ -274,20 +292,26 @@ const RealTimeMarketCard: React.FC = () => {
                           <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
                             Confidence:
                           </Typography>
-                          <LinearProgress 
-                            variant="determinate" 
+                          <LinearProgress
+                            variant="determinate"
                             value={signal.confidence * 100}
-                            sx={{ 
-                              flexGrow: 1, 
-                              mr: 1, 
-                              height: 4, 
+                            sx={{
+                              flexGrow: 1,
+                              mr: 1,
+                              height: 4,
                               borderRadius: 2,
-                              bgcolor: 'grey.300'
+                              bgcolor: 'grey.300',
                             }}
-                            color={signal.confidence > 0.7 ? 'success' : signal.confidence > 0.5 ? 'warning' : 'error'}
+                            color={
+                              signal.confidence > 0.7
+                                ? 'success'
+                                : signal.confidence > 0.5
+                                  ? 'warning'
+                                  : 'error'
+                            }
                           />
                           <Typography variant="body2" color="text.secondary">
-                            {(signal.confidence * 100).toFixed(0)}%
+                            {((signal.confidence || 0) * 100).toFixed(0)}%
                           </Typography>
                         </Box>
                       </Box>
@@ -300,15 +324,17 @@ const RealTimeMarketCard: React.FC = () => {
         </Box>
 
         {/* Market Status Indicator */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          p: 1, 
-          bgcolor: 'success.light', 
-          borderRadius: 1, 
-          color: 'success.contrastText' 
-        }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 1,
+            bgcolor: 'success.light',
+            borderRadius: 1,
+            color: 'success.contrastText',
+          }}
+        >
           <Box sx={{ width: 8, height: 8, bgcolor: 'success.main', borderRadius: '50%', mr: 1 }} />
           <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
             Market Open - Live Data
