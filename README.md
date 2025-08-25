@@ -26,6 +26,31 @@ cd /home/dev/Samrddhi
 ./scripts/stop-all-services.sh
 ```
 
+## 🧪 Simple One-Word Launcher (samrddhi CLI)
+
+If you prefer a minimal command (instead of long scripts or the full launch script) you can use the lightweight wrapper added at repo root named `samrddhi`.
+
+### Setup Once
+```bash
+chmod +x samrddhi
+sudo ln -s "$(pwd)/samrddhi" /usr/local/bin/samrddhi   # optional, for global access
+./install-cli.sh   # alternative automatic installer / repair
+```
+
+### Usage
+```bash
+samrddhi start    # docker compose up -d
+samrddhi status   # container status
+samrddhi logs     # follow logs (Ctrl+C to exit)
+samrddhi logs api-gateway  # single service logs
+samrddhi stop     # docker compose down
+samrddhi restart  # restart all
+samrddhi rebuild  # rebuild images
+samrddhi clean    # full cleanup (asks confirmation)
+```
+
+This simply wraps docker-compose commands so you don't need to remember the long form. The original `launch-complete-platform.sh` still performs full health waits & fancy output if you want that experience.
+
 ## 📋 **Documentation Quick Links**
 
 | Document | Purpose | Updated |

@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SOURCE_PATH="$0"
+if command -v readlink >/dev/null 2>&1; then
+  # Resolve full real path (handles symlink in ~/.local/bin)
+  REAL_PATH="$(readlink -f "$SOURCE_PATH" 2>/dev/null || echo "$SOURCE_PATH")"
+else
+  REAL_PATH="$SOURCE_PATH"
+fi
+ROOT_DIR="$(cd "$(dirname "$REAL_PATH")" && pwd)"
+
+# Allow explicit override
+if [ -n "${SAMRDDHI_DIR:-}" ]; then
+  ROOT_DIR="${SAMRDDHI_DIR}"
+fi
+
+cd "$ROOT_DIR" || { echo "samrddhi: failed to cd to $ROOT_DIR" >&2; exit 1; }
+
+# Locate compose file robustly
+COMPOSE_FILE=""
+for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+  if [ -f "$f" ]; then COMPOSE_FILE="$f"; break; fi
+done
+if [ -z "$COMPOSE_FILE" ]; then
+  echo "samrddhi: could not find docker-compose.yml in $ROOT_DIR" >&2
+  exit 1
+fi
+
+# Prefer classic docker-compose first (plugin has shown path quirk on this host)
+if command -v docker-compose >/dev/null 2>&1; then
+  DC=(docker-compose)
+elif command -v docker compose >/dev/null 2>&1; then
+  DC=(docker compose)
+else
+  echo "docker compose not installed" >&2; exit 1
+fi
+
+LOW_SPACE_GB=${LOW_SPACE_GB:-5}
+free_gb() {
+  df -BG / | awk 'NR==2 {gsub("G","",$4); print $4}'
+}
+
+disk_report() {
+  echo "[samrddhi] Disk summary:";
+  df -h / | awk 'NR==1 || NR==2'; echo;
+  echo "[samrddhi] Docker usage:"; docker system df || true; echo;
+  echo "[samrddhi] Top project dirs:"; du -h --max-depth=1 "$ROOT_DIR" 2>/dev/null | sort -h | tail -n 10; echo;
+}
+
+CMD="${1:-start}"; shift || true
+
+rotate_logs() {
+  # Simple rotation: compress *.log over 5MB keeping last 3
+  find "$ROOT_DIR" -maxdepth 3 -type f -name "*.log" -size +5M 2>/dev/null | while read -r f; do
+    ts="$(date +%Y%m%d-%H%M%S)"
+    gzip -c "$f" >"$f.$ts.gz" && : > "$f"
+  done || true
+  # Prune old compressed logs (keep 3 recent per original)
+  for base in $(find "$ROOT_DIR" -maxdepth 3 -type f -name "*.log" -printf '%p\n' 2>/dev/null); do
+    ls -1t "${base}".*.gz 2>/dev/null | tail -n +4 | xargs -r rm -f || true
+  done
+}
+
+lite_compose() {
+  # Generate a temporary lite compose limiting to essentials (api + frontend only)
+  cat > .docker-compose.lite.generated.yml <<'LCOMP'
+version: '3.8'
+services:
+  api-gateway:
+    build:
+      context: ./backend/services/core-trading/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SAMRDDHI_ENV=dev
+    networks: [samrddhi-network]
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000/ws
+      - REACT_APP_USE_MOCK_DATA=true
+    depends_on: [api-gateway]
+    networks: [samrddhi-network]
+networks:
+  samrddhi-network:
+    driver: bridge
+    name: samrddhi-network
+LCOMP
+  COMPOSE_FILE=".docker-compose.lite.generated.yml"
+}
+
+case "$CMD" in
+  start|up)
+    F=$(free_gb || echo 0)
+    if [ "$F" -lt "$LOW_SPACE_GB" ]; then
+      echo "[samrddhi] WARNING: low free space (${F}G < ${LOW_SPACE_GB}G). Use --force to proceed or run 'samrddhi disk' to inspect." >&2
+      if [ "${1:-}" != "--force" ]; then exit 2; else shift; fi
+    fi
+    echo "[samrddhi] starting services (detached) in $(pwd)";
+    "${DC[@]}" up -d
+    ;;
+  lite)
+    lite_compose
+    echo "[samrddhi] starting lite stack (api-gateway + frontend mock)";
+    if command -v docker-compose >/dev/null 2>&1; then
+      docker-compose -f "$COMPOSE_FILE" up -d --build
+    else
+      docker compose -f "$COMPOSE_FILE" up -d --build
+    fi
+    ;;
+  stop|down)
+    echo "[samrddhi] stopping services";
+    "${DC[@]}" down
+    ;;
+  status|ps)
+    "${DC[@]}" ps
+    ;;
+  logs)
+    if [ $# -gt 0 ]; then "${DC[@]}" logs -f --tail=100 "$1"; else "${DC[@]}" logs -f --tail=50; fi
+    ;;
+  rebuild)
+    echo "[samrddhi] rebuilding images (no cache)";
+    "${DC[@]}" build --pull --no-cache
+    "${DC[@]}" up -d
+    ;;
+  clean)
+    WITH_VOLS="false"
+    if [ "${1:-}" = "--with-volumes" ]; then WITH_VOLS="true"; shift; fi
+    echo "[samrddhi] cleanup (containers, networks, orphans)";
+    if [ "$WITH_VOLS" = "true" ]; then
+      read -r -p "This will remove named volumes (data loss). Continue? [y/N] " ans
+      if [[ $ans =~ ^[Yy]$ ]]; then
+        "${DC[@]}" down -v --remove-orphans
+      else
+        echo "Aborted volume removal."; "${DC[@]}" down --remove-orphans
+      fi
+    else
+      "${DC[@]}" down --remove-orphans
+    fi
+    ;;
+  purge)
+    echo "[samrddhi] FULL PURGE: removing containers, images, build cache (keeps project code)";
+    "${DC[@]}" down --remove-orphans || true
+    docker system prune -af || true
+    ;;
+  vacuum)
+    echo "[samrddhi] VACUUM: prune unused docker objects (safe)";
+    docker system prune -f || true
+    ;;
+  rotate-logs)
+    echo "[samrddhi] rotating logs >5MB (keep 3 archives)";
+    rotate_logs
+    ;;
+  migrate-images)
+    # Produce a canonical list of referenced images (strip build stage aliases)
+    OUT_SNAPSHOT="/tmp/samrddhi_image_snapshot_clean.txt"
+    echo "[samrddhi] producing snapshot and migrating referenced images";
+    echo "### DOCKER IMAGES (repo:tag size)" > "$OUT_SNAPSHOT"; docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | sort -h >> "$OUT_SNAPSHOT" 2>/dev/null || true; echo >> "$OUT_SNAPSHOT";
+    echo "### TOP PODMAN IMAGES (repo:tag size)" >> "$OUT_SNAPSHOT"; podman images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | sort -h | tail -n 50 >> "$OUT_SNAPSHOT" 2>/dev/null || true; echo >> "$OUT_SNAPSHOT";
+    echo "### CANONICAL REFERENCED IMAGES (unique)" >> "$OUT_SNAPSHOT";
+    CANONICAL_LIST=$(
+      ( if [ -f "$COMPOSE_FILE" ]; then grep -hE '^\s*image:\s*' "$COMPOSE_FILE" | sed -E 's/^\s*image:\s*//g' | sed -E 's/"//g' || true; fi; 
+        grep -R -hI --include=Dockerfile -E '^\s*FROM\s+' . 2>/dev/null | sed -E 's/^\s*FROM\s+//Ig' | sed -E 's/\s+[Aa][Ss].*$//' | awk '{print $1}' || true ) | sed '/^$/d' | sort -u
+    )
+    if [ -z "$CANONICAL_LIST" ]; then echo "[samrddhi] no referenced images found"; exit 0; fi
+    printf "%s\n" "$CANONICAL_LIST" >> "$OUT_SNAPSHOT"
+    echo "snapshot written to $OUT_SNAPSHOT"
+
+    # Perform migration: docker inspect -> skip, podman save->docker load, else docker pull
+    LOG=/tmp/samrddhi_image_import_log.txt
+    echo "samrddhi migrate-images log: $(date)" > "$LOG"
+    for img in $CANONICAL_LIST; do
+      echo "---- processing: $img ----" | tee -a "$LOG";
+      if docker image inspect "$img" >/dev/null 2>&1; then
+        echo "docker: present: $img" | tee -a "$LOG"; continue;
+      fi
+      if podman image inspect "$img" >/dev/null 2>&1; then
+        echo "podman: present, will podman save -> docker load: $img" | tee -a "$LOG";
+        TMPF="/tmp/$(echo "$img" | tr '/:.' '_')_$$.tar";
+        if podman save -o "$TMPF" "$img" 2>>"$LOG"; then
+          if docker load < "$TMPF" >>"$LOG" 2>&1; then echo "migrated: $img" | tee -a "$LOG"; rm -f "$TMPF" || true; else echo "docker load failed for $img" | tee -a "$LOG"; rm -f "$TMPF" || true; fi;
+        else
+          echo "podman save failed for $img" | tee -a "$LOG";
+        fi
+      else
+        echo "not found locally (will docker pull): $img" | tee -a "$LOG";
+        if docker pull "$img" >>"$LOG" 2>&1; then echo "pulled: $img" | tee -a "$LOG"; else echo "pull failed: $img" | tee -a "$LOG"; fi;
+      fi
+    done
+    echo "import log saved to $LOG";
+    echo "NOTE: podman storage not removed. Verify host Docker works for your workflows before deleting or pruning podman storage.";
+    ;;
+  disk)
+    disk_report
+    ;;
+  *)
+    cat <<EOF
+Usage: samrddhi {start|up|lite|stop|down|status|ps|logs|rebuild|clean|vacuum|purge|rotate-logs|disk}
+Commands:
+  start|up            Start services (warn if free space < ${LOW_SPACE_GB}G; override with --force)
+  lite                Start minimal stack (api + frontend mock) for UI/dev quickly
+  clean [--with-volumes]  Stop & remove containers/networks; add --with-volumes to also remove data volumes (prompts)
+  vacuum              Prune unused docker objects (non-destructive) 
+  purge               Aggressively remove all docker artifacts (images, cache)
+  rotate-logs         Rotate large *.log files (>5MB) keeping 3 compressed archives
+  disk                Show disk & docker usage
+Environment overrides:
+  SAMRDDHI_DIR=/path/to/repo  # override repo detection
+  LOW_SPACE_GB=5              # threshold for start warning
+EOF
+    exit 1 ;;
+esac

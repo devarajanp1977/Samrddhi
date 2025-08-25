@@ -5,6 +5,11 @@ services:
   postgres:
     image: postgres:15
     container_name: samrddhi-postgres
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: samrddhi_dev
       POSTGRES_USER: samrddhi_dev
@@ -25,6 +30,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: samrddhi-redis
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     ports:
       - "6379:6379"
     volumes:
@@ -40,6 +50,11 @@ services:
   influxdb:
     image: influxdb:2.7
     container_name: samrddhi-influxdb
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8086:8086"
     environment:
@@ -62,6 +77,11 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.4
     container_name: samrddhi-zookeeper
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -71,6 +91,11 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.4.4
     container_name: samrddhi-kafka
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
     depends_on:
       - zookeeper
     ports:
@@ -96,6 +121,11 @@ services:
       context: ./backend/services/core-trading/api-gateway
       dockerfile: Dockerfile
     container_name: samrddhi-api-gateway
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8000:8000"
     environment:
@@ -123,6 +153,11 @@ services:
       context: ./backend/services/core-trading/portfolio-service
       dockerfile: Dockerfile
     container_name: samrddhi-portfolio
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8100:8100"
     environment:
@@ -142,6 +177,11 @@ services:
       context: ./backend/services/core-trading/market-data-service
       dockerfile: Dockerfile
     container_name: samrddhi-market-data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8140:8140"
     environment:
@@ -161,6 +201,11 @@ services:
       context: ./backend/services/core-trading/order-management-service
       dockerfile: Dockerfile
     container_name: samrddhi-order-mgmt
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8120:8120"
     environment:
@@ -180,6 +225,11 @@ services:
       context: ./backend/services/core-trading/risk-management-service
       dockerfile: Dockerfile
     container_name: samrddhi-risk-mgmt
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8130:8130"
     environment:
@@ -199,6 +249,11 @@ services:
       context: ./backend/services/core-trading/signal-detection-service
       dockerfile: Dockerfile
     container_name: samrddhi-signals
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "8110:8110"
     environment:
@@ -219,6 +274,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: samrddhi-frontend
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     ports:
       - "3000:3000"
     environment:
@@ -234,6 +294,11 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: samrddhi-prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     ports:
       - "9090:9090"
     volumes:
@@ -245,6 +310,11 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: samrddhi-grafana
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     ports:
       - "3001:3000"
     environment:
@@ -259,6 +329,11 @@ services:
   nginx:
     image: nginx:alpine
     container_name: samrddhi-nginx
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     ports:
       - "80:80"
       - "443:443"

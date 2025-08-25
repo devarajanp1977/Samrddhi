@@ -230,7 +230,158 @@
 - **Data Integrity:** Transaction-level consistency
 - **Business Continuity:** Trading continues during system maintenance
 
+- **Data Integrity:** Transaction-level consistency
+- **Business Continuity:** Trading continues during system maintenance
+
 ---
-**Last Updated:** August 19, 2025  
-**Version:** 1.0  
-**Status:** Implementation Ready
+
+## **Candidates System Architecture (August 20, 2025 Update)**
+
+### **Trading Candidates Definition**
+**Candidates** are the primary stocks identified by the platform's intelligent algorithms as optimal **buy opportunities** to achieve the core objective of **3-7% profit per trade in 2-3 sessions**.
+
+#### **Candidate Identification Pipeline**
+```
+Market Scanning → Technical Analysis → Risk Assessment → Position Sizing → Candidate Ranking
+```
+
+#### **Candidate Properties**
+- **Symbol & Company**: Stock identifier and name
+- **Buy Signal Strength**: Confidence score (0.0-1.0)
+- **Profit Projection**: Expected return percentage (targeting 3-7%)
+- **Risk Assessment**: Position risk (0.5-1% account risk)
+- **Position Size**: Intelligent sizing based on volatility and correlation
+- **Time Sensitivity**: Opportunity window and urgency level
+- **Strategy Attribution**: Which algorithm identified the candidate
+
+### **Auto-Trading Control System**
+
+#### **Master Auto-Trading Switch**
+- **Default State**: ON (platform always working)
+- **Location**: Always visible in header/navigation
+- **Functionality**:
+  - 🟢 **ON**: Automated candidate purchasing active
+  - 🔴 **OFF**: Monitoring only, no automatic trades
+- **Emergency Stop**: Immediate halt of all automated activities
+
+#### **Automation Decision Engine**
+```python
+def should_auto_trade_candidate(candidate):
+    checks = [
+        auto_trading_enabled(),
+        within_risk_limits(candidate),
+        portfolio_capacity_available(),
+        pdt_compliance_check(),
+        correlation_acceptable(candidate)
+    ]
+    return all(checks)
+```
+
+### **Enhanced Watchlist Architecture**
+
+#### **Watchlist as Candidates Command Center**
+The existing Watchlist component is enhanced to serve as the primary interface for:
+- **Candidate Display**: Top N candidates (user-selectable: 5, 10, 15, 20)
+- **Automation Control**: Per-candidate trading decisions
+- **Status Monitoring**: Real-time automation status
+- **Manual Intervention**: Override capabilities
+
+#### **Candidate Status Types**
+1. **Queued for Auto-Buy** ✅
+   - Candidate approved for automated purchase
+   - Waiting for optimal entry timing
+   - Position size calculated and reserved
+
+2. **Being Purchased** 🔄
+   - Active order placement in progress
+   - Real-time order status updates
+   - Execution price monitoring
+
+3. **Paused** ⏸️
+   - Manual override applied
+   - Excluded from automated trading
+   - Available for manual intervention
+
+4. **Watch Only** 👁️
+   - Monitoring without trading intent
+   - Research and analysis mode
+   - No capital allocation
+
+### **Intelligent Position Sizing for Candidates**
+
+#### **Position Sizing Formula (Enhanced)**
+```
+Position Size = (
+    Account Value × Risk Percentage × Confidence Score
+) / (
+    Entry Price × Stop Distance × Volatility Factor × Correlation Penalty
+)
+```
+
+#### **Dynamic Adjustments**
+- **Market Regime Detection**: Bull/bear/sideways adjustments
+- **Volatility Scaling**: ATR-based position modifications
+- **Correlation Limits**: Reduce size for correlated positions
+- **Capital Deployment**: Maintain 95-98% target deployment
+
+### **Profit Maximization Strategy**
+
+#### **Candidate Ranking Algorithm**
+```python
+def calculate_candidate_score(candidate):
+    return (
+        profit_potential * 0.40 +
+        confidence_level * 0.30 +
+        risk_reward_ratio * 0.20 +
+        time_sensitivity * 0.10
+    )
+```
+
+#### **Opportunity Cost Analysis**
+- **Current vs Potential**: Compare existing positions with new candidates
+- **Dynamic Rebalancing**: Replace lower-potential positions
+- **Capital Efficiency**: Maximize profit per dollar deployed
+
+### **Integration Points**
+
+#### **Service Communication Flow**
+```
+Signal Detection Service → [Identifies Candidates]
+    ↓
+Risk Management Service → [Calculates Position Sizes]
+    ↓
+Portfolio Service → [Checks Correlations & Capacity]
+    ↓
+Order Management Service → [Executes Trades]
+    ↓
+Enhanced Watchlist → [Displays Status & Controls]
+```
+
+#### **Real-time Data Flow**
+- **WebSocket Streams**: Live candidate updates
+- **Status Broadcasting**: Automation state changes
+- **Order Execution**: Real-time trade confirmations
+- **Performance Updates**: P&L and success metrics
+
+### **User Experience Design**
+
+#### **Watchlist Enhancement Features**
+- **Candidate Counter**: "Showing top 10 of 47 candidates"
+- **Profit Projections**: Expected return ranges with confidence intervals
+- **Automation Indicators**: Visual status for each candidate
+- **One-Click Actions**: Rapid intervention capabilities
+- **Performance Tracking**: Real-time P&L for automated trades
+
+#### **Manual Intervention Interface**
+For each candidate:
+- **Auto-Trade Button**: Toggle automated handling
+- **Custom Size Input**: Override position size recommendations
+- **Skip Button**: Exclude from automation temporarily
+- **Force Buy**: Immediate manual execution
+- **Research View**: Detailed analysis and charts
+
+---
+
+**Last Updated:** August 20, 2025  
+**Version:** 1.1 - Candidates System Integration  
+**Status:** Ready for Enhanced Watchlist Implementation

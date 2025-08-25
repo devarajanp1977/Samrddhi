@@ -8,7 +8,7 @@ export SAMRDDHI_ENV=dev
 export $(cat .env.dev | xargs)
 
 # Activate virtual environment
-source venv/bin/activate
+source .venv/bin/activate
 
 # Function to check if service is running
 check_service() {
@@ -70,18 +70,32 @@ fi
 echo "🐳 Setting up Docker network..."
 docker network create samrddhi-network 2>/dev/null || echo "Network already exists"
 
-# Start Kafka using Docker
+# Start Kafka using Docker (skip if permission issues)
 echo "📡 Starting Kafka..."
-docker-compose -f infrastructure/docker/kafka-dev.yml up -d
+if docker-compose -f infrastructure/docker/kafka-dev.yml up -d 2>/dev/null; then
+    # Wait for Kafka
+    wait_for_service "Kafka" 9092
+else
+    echo "⚠️  Skipping Kafka (Docker permission issues) - core services ready"
+fi
 
-# Wait for Kafka
-wait_for_service "Kafka" 9092
-
-# Run database migrations
-echo "🗄️  Running database migrations..."
+# Run database migrations and initialization
+echo "🗄️  Setting up database..."
 cd backend
 python -m alembic upgrade head || echo "No migrations to run"
+echo "🎯 Initializing demo data..."
+python init_database.py
 cd ..
+
+# Kill any existing processes on required ports
+echo "🧹 Cleaning up any existing processes..."
+for port in 8000 8100 8141 8160 8180 8300 3000; do
+    if lsof -ti:$port >/dev/null 2>&1; then
+        echo "   Stopping process on port $port"
+        lsof -ti:$port | xargs kill -9 2>/dev/null || true
+    fi
+done
+sleep 2
 
 # Start backend services in development mode
 echo "🚀 Starting backend services..."
@@ -97,27 +111,46 @@ wait_for_service "API Gateway" 8000
 
 # Start core services
 echo "🔧 Starting core trading services..."
+
 cd backend/services/core-trading/portfolio-service
 python main.py &
 PORTFOLIO_PID=$!
 cd ../../../../
+wait_for_service "Portfolio Service" 8100
 
 cd backend/services/core-trading/market-data-service
 python main.py &
 MARKET_DATA_PID=$!
 cd ../../../../
+wait_for_service "Market Data Service" 8141
 
 cd backend/services/core-trading/order-management-service
 python main.py &
 ORDER_MGMT_PID=$!
 cd ../../../../
+wait_for_service "Order Management Service" 8160
+
+cd backend/services/core-trading/risk-management-service
+python main.py &
+RISK_MGMT_PID=$!
+cd ../../../../
+wait_for_service "Risk Management Service" 8180
+
+cd backend/services/dashboard-api
+python main.py &
+DASHBOARD_PID=$!
+cd ../../
+wait_for_service "Dashboard API" 8300
 
 # Start frontend
 echo "🎨 Starting frontend..."
-cd frontend
-npm start &
+cd /home/dev/Samrddhi/frontend
+if [ ! -f package.json ]; then
+    echo "❌ Frontend package.json not found"
+    exit 1
+fi
+npm start > frontend.log 2>&1 &
 FRONTEND_PID=$!
-cd ..
 
 # Wait for frontend
 wait_for_service "Frontend" 3000
@@ -131,15 +164,33 @@ cd ../..
 # Wait a moment for everything to initialize
 sleep 5
 
-# Health check
-echo "🏥 Running health checks..."
-curl -s http://localhost:8000/health || echo "API Gateway health check failed"
+# Health check all services
+echo "🏥 Running comprehensive health checks..."
+services_healthy=true
+
+for service_info in "API Gateway:8000" "Portfolio Service:8100" "Market Data:8141" "Order Management:8160" "Risk Management:8180" "Dashboard API:8300" "Frontend:3000"; do
+    service_name=$(echo $service_info | cut -d: -f1)
+    port=$(echo $service_info | cut -d: -f2)
+    
+    if curl -s -f "http://localhost:$port/health" >/dev/null 2>&1 || check_service "$service_name" "$port"; then
+        echo "✅ $service_name is healthy"
+    else
+        echo "❌ $service_name health check failed"
+        services_healthy=false
+    fi
+done
+
+if [ "$services_healthy" = false ]; then
+    echo "⚠️  Some services failed health checks, but platform is starting..."
+fi
 
 # Store PIDs for cleanup
 echo $API_GATEWAY_PID > .dev_pids
 echo $PORTFOLIO_PID >> .dev_pids
 echo $MARKET_DATA_PID >> .dev_pids
 echo $ORDER_MGMT_PID >> .dev_pids
+echo $RISK_MGMT_PID >> .dev_pids
+echo $DASHBOARD_PID >> .dev_pids
 echo $FRONTEND_PID >> .dev_pids
 
 echo ""
@@ -153,6 +204,11 @@ echo "   Grafana:      http://localhost:3001"
 echo ""
 echo "📊 Service Status:"
 check_service "API Gateway" 8000
+check_service "Portfolio Service" 8100
+check_service "Market Data Service" 8141
+check_service "Order Management" 8160
+check_service "Risk Management" 8180
+check_service "Dashboard API" 8300
 check_service "Frontend" 3000
 check_service "PostgreSQL" 5432
 check_service "Redis" 6379

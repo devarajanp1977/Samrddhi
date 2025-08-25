@@ -1,53 +1,117 @@
-# SAMRDDHI Trading Platform - Tomorrow's TODO List
-*Created: August 19, 2025*
+# TODO TOMORROW 📝
+*Updated: August 21, 2025 - Post Alpaca Integration Session*
 
-## 🚨 **CRITICAL - Must Fix Tomorrow**
+## � **HIGH PRIORITY** (Start here!)
 
-### 1. **Signal Detection Service Stability** ⚠️
-- **Issue**: Service becomes unresponsive intermittently  
-- **Current Status**: Running but API Gateway reports "unavailable"
-- **Action Required**: Debug connection issues, improve error handling
-- **Files**: `/backend/services/core-trading/signal-detection-service/main.py`
-- **Priority**: HIGH - affects overall system health
+### 1. **Activate Alpaca Paper Trading** (10 minutes) 
+```bash
+cd backend/services/core-trading/alpaca-integration
+./setup_paper_trading.sh
+```
+- **Why**: Ready to move from demo to real market data
+- **Benefit**: $100k paper trading account with live market feeds
+- **Status**: All code ready, just need credentials
 
-### 2. **Database Integration** 🗄️
-- **Issue**: Currently using in-memory storage (not persistent)
-- **Current Status**: Works for demo but data is lost on restart
-- **Action Required**: Implement PostgreSQL integration
-- **Files**: All service `main.py` files need database models
-- **Priority**: HIGH - needed for real usage
+### 2. **Test Paper Trading Features** (20 minutes)
+- Visit http://localhost:3000/alpaca-test (service status check)
+- Test portfolio retrieval with real Alpaca account  
+- Verify WebSocket market data streaming works
+- Check order simulation endpoints
 
-## 🎯 **HIGH PRIORITY - Core Functionality**
+### 3. **Implement Order Placement UI** (45 minutes)
+```typescript
+// In AlpacaTestPage.tsx - Add order placement form
+const placeOrder = async (symbol, qty, side) => {
+  const response = await fetch('http://localhost:8200/orders', {
+    method: 'POST',
+    body: JSON.stringify({symbol, qty, side, type: 'market'})
+  })
+}
+```
 
-### 3. **Authentication System** 🔐
-- **Issue**: No user authentication implemented
-- **Current Status**: All endpoints are public
-- **Action Required**: Add JWT-based authentication
-- **Files**: Create auth service or add to API Gateway
-- **Priority**: HIGH - required for multi-user platform
+## 🔧 **MEDIUM PRIORITY** (If time permits)
 
-### 4. **Real Market Data Integration** 📊
-- **Issue**: Using mock data only
-- **Current Status**: Simulated stock prices working well
-- **Action Required**: Integrate Alpha Vantage, Yahoo Finance, or similar
-- **Files**: `/backend/services/core-trading/market-data-service/main.py`
-- **Priority**: MEDIUM - needed for live trading
+### 4. **Enhanced Watchlist Features** (30 minutes)
+- Add "Buy" and "Sell" buttons to CandidatesWatchlist table
+- Connect buttons to order placement endpoints
+- Show real-time price updates using WebSocket
 
-### 5. **Error Handling & Logging** 📝
-- **Issue**: Basic error handling, minimal logging
-- **Current Status**: Services work but debugging is difficult
-- **Action Required**: Structured logging, better error responses
-- **Files**: All service files need improved error handling
-- **Priority**: MEDIUM - needed for production reliability
+### 5. **Fix Market Data Service** (???) 
+- Currently unavailable on port 8140
+- May need rebuild or alternative data source
+- Consider integrating with Alpaca real-time feeds
 
-## 🛠️ **MEDIUM PRIORITY - Infrastructure**
+### 6. **Update Main Documentation** (15 minutes)
+- Update README.md with latest capabilities
+- Add paper trading setup to main docs
+- Include service architecture diagram
 
-### 6. **WebSocket Connection Management** 🔌
-- **Issue**: Basic WebSocket implementation
-- **Current Status**: Works for single connections
-- **Action Required**: Connection pooling, reconnection logic
-- **Files**: Market Data service WebSocket endpoints
-- **Priority**: MEDIUM - needed for scale
+## 🎯 **OPTIONAL TASKS** (Future sessions)
+
+### Algorithm Integration
+- Connect trading strategies to Alpaca order system
+- Implement backtesting framework
+- Add risk management controls
+
+### UI Enhancements  
+- Real-time portfolio chart
+- Trading history dashboard
+- Performance analytics view
+
+### Infrastructure
+- Database integration (PostgreSQL)
+- User authentication system
+- Docker containerization
+
+## � **KEY FILES TO REVIEW**
+
+```bash
+# Before starting, quickly review these:
+backend/services/core-trading/alpaca-integration/main.py   # Main service
+frontend/src/components/trading/AlpacaTestPage.tsx        # Test interface
+ALPACA_PAPER_TRADING_COMPLETE.md                          # Full docs
+DEV_GUIDE.md                                              # Technical guide
+```
+
+## ⚡ **QUICK START COMMANDS**
+
+```bash
+# 1. Start all services
+cd /home/dev/Samrddhi
+./launch-complete-platform.sh
+
+# 2. Open test page
+# http://localhost:3000/alpaca-test
+
+# 3. Set up paper trading (when ready)
+cd backend/services/core-trading/alpaca-integration  
+./setup_paper_trading.sh
+```
+
+## 🎉 **PROGRESS TRACKER**
+
+- [x] Enhanced Watchlist (table format) ✅
+- [x] Alpaca Integration Service ✅  
+- [x] Official Documentation Compliance ✅
+- [x] Automated Setup Scripts ✅
+- [x] Comprehensive Documentation ✅
+- [ ] Paper Trading Activation ⏳ (Next!)
+- [ ] Order Placement UI ⏳
+- [ ] Real-time Market Data ⏳
+- [ ] Trading History ⏳
+
+## 💡 **REMEMBER**
+
+- **Demo Mode**: Service runs in demo mode by default (safe)
+- **Paper Trading**: Activate only when ready for real market data
+- **Global Access**: Alpaca paper trading works worldwide with email only
+- **No Risk**: Paper trading uses virtual money ($100k default)
+
+---
+
+**Ready to continue the trading platform journey! 🚀📈**
+
+*Delete completed tasks and add new ones as you progress.*
 
 ### 7. **Performance Optimization** ⚡
 - **Issue**: No caching, potential performance bottlenecks
